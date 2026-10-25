@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1229">
+  <title>创作工作室 — 序幕 Prelude</title>
+  <meta name="description" content="在序幕工作室写下你的下一幕，生成、预览并收藏属于你的电影镜头。">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" as="image" href="assets/cloudscape.webp">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400&family=Lora:ital,wght@1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="effects.css"><link rel="stylesheet" href="studio.css?v=20261025-1"><link rel="stylesheet" href="workspace.css?v=1">
+  <link rel="stylesheet" href="navigation.css?v=1"><script src="navigation.js?v=1"></script>
+  <link rel="stylesheet" href="waiting.css?v=1"><script src="waiting.js?v=1" defer></script>
+  <script src="duration.js?v=1" defer></script><link rel="stylesheet" href="collection.css?v=1"><script src="collection.js?v=1" defer></script><script src="app.js?v=20261025-reference1" defer></script><script src="effects.js" defer></script>
+  <link rel="stylesheet" href="interactions.css?v=1">
+  <script src="interactions.js?v=1" defer></script>
+</head>
+<body data-page="workspace">
+  <a class="skip-link" href="#prompt">跳到创作输入框</a>
+  <svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-diagonal" viewBox="0 0 24 24"><path d="M5 19 19 5M5 5h14v14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4m10 0h4M3 15h4m10 0h4"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-restore" viewBox="0 0 24 24"><path d="M4 11a8 8 0 1 1 1 6M4 4v7h7M12 8v5l3 2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m15 5 4 4M4 20l5-1L21 7a2.8 2.8 0 0 0-4-4L5 15l-1 5Z"/></symbol>
+  </defs></svg>
+  <div class="workspace-atmosphere hero" aria-hidden="true"><img class="hero-art" src="assets/cloudscape.webp" alt=""><video class="hero-video" data-src="assets/cloudscape-loop.mp4" muted loop playsinline preload="none" tabindex="-1"></video><div class="atmosphere-veil"></div></div>
+  <aside class="studio-sidebar">
+    <a class="wordmark" href="index.html" aria-label="序幕 Prelude 首页">PRELUDE<span class="wordmark-cn">序幕</span></a>
+    <span class="sidebar-caption">A SPACE FOR IMAGINATION</span>
+    <button class="new-scene-button" type="button" data-new-scene><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>开启新镜头</button>
+    <nav aria-label="工作室导航" class="studio-nav">
+      <a href="#studio" class="is-active"><svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg>创作空间<span class="nav-dot"></span></a>
+      <a href="#works"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>我的作品<span id="workspace-count">0</span></a>
+      <a href="index.html#inspiration"><svg class="icon" aria-hidden="true"><use href="#i-film"/></svg>灵感片场<svg class="icon nav-external" aria-hidden="true"><use href="#i-diagonal"/></svg></a>
+    </nav>
+    <div class="sidebar-bottom"><div class="sidebar-quote"><span>Every story</span><br>begins with you</div><p>每一幕，都始于你的想象</p><a href="index.html"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>返回云海首页<svg class="icon" aria-hidden="true"><use href="#i-diagonal"/></svg></a><div class="local-space"><span class="local-avatar">序</span><div>我的创作空间<small>本地工作室</small></div><span class="connection-dot"></span></div></div>
+  </aside>
+  <div class="studio-body">
+    <header class="studio-topbar"><div><span class="topbar-breadcrumb">我的工作室</span><span class="topbar-slash">/</span><span id="workspace-section-name">创作空间</span></div><div class="topbar-actions"><span id="workspace-connection" role="status"><i></i>正在连接工作室</span><button id="scene-motion-toggle" type="button" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg><span>暂停动态</span></button></div></header>
+    <main class="studio-main" id="studio">
+      <div class="workspace-heading"><div><p class="workspace-eyebrow"><span>✦</span> YOUR CREATIVE UNIVERSE</p><h1>让灵感，在这里发生</h1><p class="workspace-subtitle">一段描述，一场只属于你的电影</p></div><span class="workspace-signature" aria-hidden="true">Make a little<br><em>movie magic</em></span></div>
+      <div class="workspace-grid">
+        <section class="composer-panel glass-panel" id="create" aria-labelledby="creation-title">
+          <div class="panel-heading"><span class="panel-eyebrow">01 / IMAGINE</span><span class="quality-tag">720P HD</span></div>
+          <h2 id="creation-title">写下你的下一幕</h2><p class="composer-help">从一个画面开始，让想象慢慢清晰</p>
+          <form id="creation-form">
+            <label class="sr-only" for="prompt">描述你想生成的视频</label><div class="prompt-shell"><textarea id="prompt" maxlength="1200" required placeholder="一只白鹭掠过暮色云海，夕阳照亮羽翼，镜头缓缓跟随……"></textarea><div class="prompt-meta"><span>主体 · 动作 · 镜头 · 氛围</span><span id="prompt-count">0 / 1200</span></div></div>
+            <div class="prompt-suggestions" aria-label="试用灵感描述"><span>灵感</span><button type="button" data-preset="cloud">暮色云海</button><button type="button" data-preset="city">雨夜东京</button><button type="button" data-preset="lunar">月面漫游</button></div>
+            <div class="reference-panel" id="reference-panel" hidden><img id="reference-image" src="assets/city.webp" alt="已选择的参考首帧"><div><strong id="reference-title">已选择参考首帧</strong><p>此图将作为视频首帧 · 保留横屏构图与光影基调</p></div><button type="button" id="remove-reference">改为文生视频</button></div><p class="generation-mode" id="generation-mode">文生视频 · 根据文字重新构图，不使用示例图片</p>
+            <div class="generation-settings"><label><span>画面比例</span><select id="aspect" aria-label="画面比例"><option value="16:9">16:9 · 横屏</option><option value="9:16">9:16 · 竖屏</option><option value="1:1">1:1 · 方形</option></select></label><label><span>视频时长</span><span class="duration-field"><input id="duration" type="number" min="2" max="15" step="1" inputmode="numeric" placeholder="10" aria-label="视频时长" aria-describedby="duration-help"><span aria-hidden="true">秒</span></span></label></div>
+            <div class="duration-advice" id="duration-help"><span>可填写 2–15 秒</span><button type="button" id="apply-duration" disabled>填写描述后推荐时长</button></div>
+            <div class="model-summary"><span class="model-mark">✧</span><span>万相 2.6<small>单镜头 · 文生视频</small></span><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></div>
+            <button type="submit" class="generate-button"><span><svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg><span id="generate-label">生成我的视频</span></span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+            <p class="prototype-note"><span aria-hidden="true"></span><span id="generation-cost">720P · 5 秒标价 ¥3.00 · 可用免费额度优先抵扣</span></p><p class="form-status" id="form-status" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+        <section class="workspace-preview glass-panel" id="workspace-preview" aria-labelledby="preview-title">
+          <div class="panel-heading preview-panel-heading"><span class="panel-eyebrow" id="preview-kicker">02 / YOUR NEXT SCENE</span><div class="preview-management"><button type="button" class="preview-favorite" id="preview-favorite" aria-label="收藏当前作品" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg></button><button type="button" class="rename-trigger" id="preview-detail" hidden>作品详情</button><button type="button" class="rename-trigger" id="rename-work" hidden><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg>重命名</button></div></div>
+          <div class="preview-visual"><img id="preview-image" src="assets/cloudscape.webp" alt="暮色云海灵感画面"><video id="preview-video" controls playsinline preload="metadata" hidden></video><div class="preview-welcome" id="workspace-welcome"><span>✧</span><p>Your next masterpiece</p><h2>下一幕，等你来导演</h2><small>在左侧写下一句话，让画面从想象中走来</small></div><div id="job-progress" hidden>
+        <video class="waiting-clouds" muted playsinline loop preload="none" poster="assets/cloudscape.webp" aria-hidden="true" tabindex="-1"></video>
+        <div class="waiting-veil" aria-hidden="true"></div><div class="waiting-stars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="waiting-content"><span class="waiting-eyebrow" id="job-eyebrow">IMAGINATION IN MOTION</span>
+          <div class="waiting-emblem" aria-hidden="true"><span>✦</span></div>
+          <div class="waiting-message" role="status" aria-live="polite" aria-atomic="true"><h3 id="job-progress-title">让想象，慢慢显影</h3><p id="job-progress-detail">灵感正在成为画面</p></div>
+          <ol class="waiting-stages" aria-label="视频生成阶段"><li data-stage="0"><i aria-hidden="true"></i><span>提交</span></li><li data-stage="1"><i aria-hidden="true"></i><span>排队</span></li><li data-stage="2"><i aria-hidden="true"></i><span>生成</span></li><li data-stage="3"><i aria-hidden="true"></i><span>保存</span></li></ol>
+          <span id="job-elapsed" aria-live="off"></span>
+        </div><span class="waiting-caption">云海为等待氛围 · 非生成画面</span>
+      </div><span class="static-label" id="preview-badge" hidden>AI 生成视频</span></div>
+          <div class="workspace-preview-details"><div class="preview-heading"><h2 id="preview-title">画面预览</h2><span id="preview-spec">等待你的第一个镜头</span></div><p id="preview-prompt" hidden></p><p id="preview-notice">生成完成后，你的视频会自动保存在下方作品集中</p><div class="preview-actions" id="workspace-preview-actions" hidden><button type="button" class="secondary-button" id="use-preview"><svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg>复用描述</button><a class="secondary-button" id="download-video" hidden download><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>下载视频</a><button type="button" class="secondary-button" id="check-task" hidden>重新查询进度</button><button type="button" id="save-plan" hidden><span>保存镜头方案</span></button></div><p id="preview-status" role="status" aria-live="polite"></p></div>
+        </section>
+      </div>
+      <section class="workspace-library" id="works" aria-labelledby="library-title"><div class="works-heading"><div><span class="panel-eyebrow">YOUR FILM COLLECTION</span><h2 id="library-title">灵感留下的回响 <span id="works-total">0 个镜头</span></h2></div><label class="works-search"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="work-search" type="search" placeholder="搜索作品或描述" aria-label="搜索作品或描述"></label></div><div class="works-toolbar" role="group" aria-label="筛选作品"><button type="button" data-work-filter="all" aria-pressed="true">全部作品</button><button type="button" data-work-filter="completed" aria-pressed="false">已完成</button><button type="button" data-work-filter="active" aria-pressed="false">进行中</button><button type="button" data-work-filter="favorite" aria-pressed="false">我的收藏 <span id="favorite-count">0</span></button><button type="button" data-work-filter="trash" class="trash-filter" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>最近删除 <span id="trash-count">0</span></button></div><p class="trash-help" id="trash-help" hidden>已删除的作品保留在这里，恢复后即可继续播放和使用</p><p id="library-status" role="status" aria-live="polite"></p><div id="library-items"></div><div class="library-empty" id="library-empty"><svg class="icon" aria-hidden="true"><use href="#i-film"/></svg><h3 id="library-empty-title">你的第一幕，还在想象中</h3><p id="library-empty-description">写下一句话，让它成为第一个被看见的镜头</p><button type="button" class="secondary-button" id="library-create">开始创作<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div></section>
+      <footer class="workspace-footer"><span>PRELUDE / 序幕</span><span>始于想象，终于看见</span><span>MADE FOR YOUR IMAGINATION</span></footer>
+    </main>
+  </div>
+  <dialog id="rename-dialog" aria-labelledby="rename-title"><form id="rename-form"><div class="dialog-top"><span class="dialog-kicker">A NAME FOR YOUR SCENE</span><button type="button" class="icon-button" data-close-dialog aria-label="关闭重命名"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="rename-content"><h2 id="rename-title">给这一幕，取个名字</h2><label for="work-title">作品名称</label><input id="work-title" maxlength="60" required autocomplete="off"><p id="rename-status" role="status" aria-live="polite"></p><button type="submit" class="secondary-button">保存名称<svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></button></div></form></dialog>
+  <dialog id="work-detail-dialog" aria-labelledby="detail-title">
+    <div class="dialog-top"><span class="dialog-kicker">A CLOSER LOOK / 作品详情</span><button type="button" class="icon-button" data-close-dialog aria-label="关闭作品详情"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+    <div class="work-detail-layout"><div class="detail-screen"><video id="detail-video" controls playsinline preload="metadata" hidden></video><img id="detail-image" src="assets/cloudscape.webp" alt=""><div id="detail-placeholder"><span>✧</span><p id="detail-placeholder-text">你的镜头记录</p></div><span class="detail-type" id="detail-type"></span></div>
+      <div class="detail-content"><span class="panel-eyebrow">A FRAME WORTH KEEPING</span><h2 id="detail-title"></h2><span class="detail-state" id="detail-state"></span><dl id="detail-parameters"></dl>
+        <div class="detail-prompt-heading"><h3>这一幕的描述</h3><button type="button" id="copy-work-prompt"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>复制</button></div><p id="detail-prompt"></p><p id="detail-message" role="status" aria-live="polite"></p>
+        <div class="detail-actions"><button type="button" class="secondary-button" id="detail-reuse">复用描述<svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg></button><a id="detail-download" class="secondary-button" download hidden>下载视频<svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></a><button type="button" class="secondary-button" id="detail-progress" hidden>查看生成进度</button><button type="button" class="secondary-button" id="detail-restore" hidden><svg class="icon" aria-hidden="true"><use href="#i-restore"/></svg>恢复作品</button></div>
+        <div class="detail-secondary"><button type="button" id="detail-favorite" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg><span>收藏作品</span></button><button type="button" id="detail-trash"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>删除作品</button></div>
+      </div></div>
+  </dialog>
+  <div class="collection-toast" id="collection-toast" hidden><span role="status" aria-live="polite" id="collection-toast-text"></span><button type="button" id="undo-trash" hidden>撤销</button><button type="button" class="icon-button" id="dismiss-collection-toast" aria-label="关闭操作提示"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+</body>
+</html>

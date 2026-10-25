@@ -1,0 +1,33 @@
+序幕首页云海视频制作要求
+
+状态
+2026-10-25 已通过百炼 wan2.6-i2v-flash 生成一条 720P、10 秒、无声原片。
+原片 cloudscape-raw.mp4；网站使用 dist/assets/cloudscape-loop.mp4，9 秒，含 1 秒首尾叠化。
+提交前已核对该模型剩余免费额度 50 秒，完成后控制台显示剩余 40 秒；本次仅成功提交一条，不批量重试。
+
+首帧
+cloudscape-start-frame.png
+使用现有云海原图，保持两侧高耸的云墙、中央开阔天空、偏下的暖色地平线。
+
+第一轮目标
+单条，10 秒，横屏 16:9，无声。
+固定镜头，保持原有构图与蓝紫、金粉色调。
+让云层内部产生可感知的缓慢翻卷和局部升腾；近处云团比远处云层运动稍明显。
+运动速度和曝光保持稳定，不突然加速、变天、切换场景或移动地平线。
+先检查云层变化、形体稳定性和构图，再评估首尾衔接；模型不保证直接输出无缝循环。
+
+图生视频提示词
+Locked-off cinematic wide shot of the exact cloudscape in the reference image. Preserve the composition: towering violet cloud banks on both sides, an open deep cobalt sky in the center, and a warm rose-gold horizon below. The clouds slowly billow and curl from within, with gentle rolling convection and continuously evolving soft edges. Nearby cloud volumes subtly rise and drift while distant clouds move more slowly, creating natural depth. Warm sunset light softly illuminates their rims. Keep the camera completely stationary, the horizon level, the cloud banks in their original locations, and the blue-violet and peach color palette consistent. Maintain a steady, calm pace and stable exposure throughout this single uninterrupted shot. End with similar framing and lighting to the opening so the footage can be edited into a gentle background loop. No text, logos, people, buildings, aircraft, camera shake, scene cuts, sudden zooms, storms, lightning, or dramatic lighting changes.
+
+验收
+1. 在数秒内能目视确认云层局部形态发生变化，不只是画面整体位移或缩放。
+2. 两侧云墙、中央留白及地平线关系保持稳定，适配居中标题与创作卡片。
+3. 云层不出现橡胶拉伸、明显融化、轮廓撕裂或突变。
+4. 整段无文字、人物、飞行物及其他新增主体。
+5. 检查原片首尾后再做循环处理，不以播放器的 loop 属性代替无缝衔接验收。
+6. 在真实本地页面检查自动静音播放、暂停/继续及浏览器兼容性。
+
+费用与提交边界
+需要可用的视频生成账号、额度及明确预算后才能提交。
+第一轮只提交一条；若效果不合格，记录问题后再决定是否重试。
+不得自动开通订阅、购买积分或连续批量重试。

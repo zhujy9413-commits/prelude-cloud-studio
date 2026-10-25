@@ -1,0 +1,64 @@
+/* Center the act of creating; keep the cloudscape visible around the panel. */
+.hero{min-height:max(850px,100svh)}
+.hero-art{object-position:50% 63%}
+.hero-shade{background:linear-gradient(180deg,rgba(3,9,30,.22),rgba(3,9,30,.08) 44%,rgba(9,9,9,.12) 72%,#090909 100%),radial-gradient(ellipse at 50% 32%,rgba(6,12,35,.20),transparent 65%)}
+.hero-layout{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;max-width:1100px;padding:133px 32px 135px}
+.hero-copy{text-align:center;padding:0;width:100%}
+.hero-script{font-size:34px;line-height:1.15;letter-spacing:-1.5px;margin:0 0 13px;color:#ece8f5}
+.hero h1{font-size:clamp(40px,4vw,62px);line-height:1.35;letter-spacing:.07em;margin:0;text-shadow:0 3px 25px #0b123132}
+.hero h1>span{white-space:nowrap}
+.hero-description{font-size:14px;line-height:1.9;letter-spacing:.06em;margin:15px 0 0;color:#e4dded}
+.description-separator{padding:0 8px;color:#d3c3e3}
+.creation-pass{max-width:740px;justify-self:auto;padding:25px 28px 22px;border-radius:18px;border-color:#eee6ff52;background:linear-gradient(135deg,#eef0ff0c,#26213a14);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 16px 65px #070c271a,inset 0 1px 0 #ffffff14}
+.creation-pass:before{background:linear-gradient(115deg,#ffffff08,transparent 46%)}
+.creation-pass h2.sr-only{position:absolute;margin:0}
+.pass-top{font-size:10px;letter-spacing:1.5px;color:#eee7f4}
+.pass-top .icon{width:15px;height:15px}
+.pass-number{font-size:9px;letter-spacing:1px;color:#d8cce7}
+.pass-divider{margin:18px -28px 20px;background:#efe8ff24}
+.prompt-shell{padding:15px 16px 10px;border-color:#f5ecff42;background:#0c102725;border-radius:10px}
+.prompt-shell:focus-within{background:#0c10273d;border-color:#e1bdff9c}
+.creation-pass textarea{min-height:100px;max-height:240px;font-size:14px;line-height:1.9}
+.creation-pass textarea::placeholder{color:#ebe5f3a8}
+.prompt-meta{margin-top:10px;font-size:10px;color:#e3d7ecb8}
+.prompt-suggestions{gap:9px;margin:14px 0 22px;font-size:11px;color:#e6deee}
+.prompt-suggestions button{font-size:11px;padding:6px 11px;background:#ffffff09;border-color:#f0e5ff38}
+.creation-controls{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:23px;align-items:end}
+.generation-settings{gap:13px;grid-template-columns:1.15fr 1fr}
+.generation-settings label{font-size:11px;gap:8px;color:#e9dff2}
+.generation-settings select{height:45px;padding:10px 25px 10px 12px;font-size:12px;background-color:#1013292e;border-color:#f2e7ff38;border-radius:7px}
+.generate-button{height:45px;margin:0;padding:11px 17px;font-size:13px;border-radius:7px;background:#ad50f1;box-shadow:0 3px 20px #ae4fff18}
+.generate-button:hover{background:#b763f3}
+.prototype-note{margin-top:16px;font-size:10px;line-height:1.7;color:#e6d9ecb8}
+.hero-footer{bottom:26px;display:grid;grid-template-columns:1fr auto 1fr}
+.hero-footer>a{justify-self:center;color:#e4d9ec;gap:12px;font-size:11px}
+.hero-footer>button{justify-self:end}
+@media(min-width:1700px){.hero-layout{padding-top:150px;padding-bottom:150px;gap:34px}.hero h1{font-size:66px}.creation-pass{max-width:780px}}
+@media(max-width:950px){.hero{min-height:max(830px,100svh)}.hero-layout{padding:127px 30px 115px;gap:28px}.hero h1{font-size:48px}.hero-script{font-size:31px}.hero-description{font-size:13px}.creation-pass{max-width:680px;padding:25px 26px 22px}.pass-divider{margin-left:-26px;margin-right:-26px}.hero-footer>span:first-child{font-size:7px}}
+@media(max-width:760px){
+  .hero{min-height:900px}
+  .hero-layout{max-width:600px;padding:124px 24px 107px;gap:26px}
+  .hero h1{font-size:clamp(31px,7vw,44px);line-height:1.55;letter-spacing:.03em}
+  .hero-script{font-size:29px;letter-spacing:-1px;margin-bottom:12px}
+  .hero-description{font-size:12px;line-height:1.9;margin-top:14px;letter-spacing:.04em}
+  .hero-description>span:last-child{display:block}
+  .description-separator{display:none}
+  .creation-pass{padding:23px 22px 20px;border-radius:15px}
+  .pass-divider{margin:17px -22px 19px}
+  .pass-top{font-size:9px;letter-spacing:1px}
+  .pass-number{font-size:8px}
+  .creation-pass textarea{min-height:120px;font-size:16px}
+  .prompt-meta{font-size:9px;gap:5px}
+  .prompt-suggestions{gap:7px;margin:13px 0 20px}
+  .prompt-suggestions button{font-size:10px;padding:6px 9px}
+  .creation-controls{grid-template-columns:1fr;gap:19px}
+  .generation-settings{gap:13px}
+  .generation-settings select{font-size:13px}
+  .generate-button{height:46px;font-size:13px}
+  .prototype-note{font-size:9px;margin-top:13px}
+  .hero-footer{left:24px;right:24px;bottom:22px;grid-template-columns:1fr auto}
+  .hero-footer>a{justify-self:start;font-size:10px}
+  .hero-footer>span:first-child{display:none}
+}
+@media(max-width:390px){.hero-layout{padding-left:20px;padding-right:20px}.hero h1{font-size:30px}.hero-description{font-size:11px}.creation-pass{padding-left:18px;padding-right:18px}.pass-divider{margin-left:-18px;margin-right:-18px}.prompt-suggestions{gap:6px}.prompt-suggestions button{padding-left:8px;padding-right:8px}}
+@media(min-width:761px) and (max-height:850px){.hero{min-height:max(790px,100svh)}.hero-layout{padding-top:114px;padding-bottom:105px;gap:23px}.hero-script{font-size:29px;margin-bottom:10px}.hero h1{font-size:49px}.hero-description{margin-top:11px;font-size:13px}.creation-pass{padding-top:22px;padding-bottom:19px}.creation-pass textarea{min-height:90px}.prompt-suggestions{margin-bottom:18px}.pass-divider{margin-top:16px;margin-bottom:18px}}

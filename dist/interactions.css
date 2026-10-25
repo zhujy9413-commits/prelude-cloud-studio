@@ -1,0 +1,91 @@
+/* Shared interaction language: outlined glass controls, a lit selection, a soft press. */
+:root{--control-line:#b8c5eb54;--control-fill:#c4b6ed10;--control-text:#e4e7f3;--control-lit:#d9c4f2;--control-ink:#252137}
+body :where(button,a[href]){transition:background-color 160ms ease,border-color 160ms ease,color 160ms ease,box-shadow 160ms ease,transform 160ms ease}
+body :where(button,a[href]):focus-visible{outline:2px solid #ead6ff;outline-offset:4px;box-shadow:0 0 0 5px #c6a6ef22}
+body :where(button,a[href]):not(:disabled):active{transform:translateY(1px) scale(.98);transition-duration:65ms}
+body button:disabled{cursor:not-allowed}
+body .generate-button:disabled{cursor:wait}
+.press-surface{position:relative}
+.press-wave{position:absolute;inset:0;border-radius:inherit;z-index:5;pointer-events:none;background:radial-gradient(circle 90px at var(--press-x,50%) var(--press-y,50%),#f5e3ff66,#d4b7f522 45%,transparent 75%);animation:control-press 520ms ease-out both}
+@keyframes control-press{0%{opacity:0}18%{opacity:.9}100%{opacity:0}}
+
+/* Navigation remains quiet, but each destination has a visible hit area. */
+body .main-nav{gap:12px;font-size:14px}
+body .main-nav a{padding:10px 15px;border:1px solid #d8d8f02e;border-radius:7px;background:#bbc3ef09;color:#e3e6f3}
+body .main-nav .is-active{background:#d3c3f126;border-color:#e2cbf476;box-shadow:inset 0 1px 0 #ffffff12}
+body .main-nav .is-active:after{display:none}
+body .workspace-button,body .new-scene-button{font-size:13px;min-height:44px;background:#c1a4ef1a;border-color:#d7c0ee72;box-shadow:inset 0 1px 0 #ffffff0e}
+body .studio-nav a{color:#d1dbed;border-color:#acbfe326;background:#bdc5ed07;min-height:46px;font-size:13px}
+body .studio-nav a.is-active{background:linear-gradient(110deg,#c8a8ee33,#b0b9ef15);border-color:#d7b9f26b;color:#f5ebff;box-shadow:inset 3px 0 0 #d5b0ef}
+body .sidebar-bottom>a{margin:0 0 15px;padding:12px 10px;border:1px solid #b7c4e33b;border-radius:7px;background:#bfcced08;color:#d0daed;font-size:12px}
+body .wordmark:hover{color:#ead8ff;text-shadow:0 0 22px #cfacff4d}
+body .hero-footer>a,body .closing-action{min-height:40px;border:1px solid #d4c6e75c;border-radius:7px;background:#ccc1ef0d;padding:10px 14px;color:#e9e0f4;font-size:12px}
+body #scene-motion-toggle{min-height:34px;border:1px solid #bfc8e04a;background:#bac5ec0b;color:#d6dfef!important;font-size:11px!important;padding:7px 10px}
+
+/* Form suggestions and secondary actions should read as controls before hover. */
+body .prompt-suggestions button{min-height:32px;padding:6px 11px;font-size:12px;border:1px solid var(--control-line);background:var(--control-fill);color:var(--control-text)}
+body .prompt-suggestions button[aria-pressed="true"]{border-color:#dec5f48c;background:#c5a1ed29;color:#f6eaff}
+body .duration-advice button{min-height:31px;padding:5px 10px;font-size:11px;border-color:#c7a9e65c;background:#bc95e719;color:#eedaff}
+body .duration-advice button:disabled{border-style:dashed;opacity:.5;background:none;color:#b4bed4}
+body .generate-button,body .composer-panel .generate-button{min-height:46px;font-size:14px;border-color:#f2d8ff63;box-shadow:inset 0 1px 0 #ffffff24,0 7px 25px #8051c933}
+body .secondary-button,body .workspace-preview .preview-actions :is(button,a),body .detail-actions .secondary-button{min-height:38px;padding:9px 13px;font-size:12px;border:1px solid #c7bae664;background:#c5b2e817;color:#e9e2f6;box-shadow:inset 0 1px 0 #ffffff0a}
+body .preview-management{gap:8px}
+body .rename-trigger{min-height:32px;padding:6px 10px;font-size:11px;border:1px solid var(--control-line);background:var(--control-fill);border-radius:6px;color:var(--control-text)}
+body .preview-favorite{width:34px;height:34px;border:1px solid var(--control-line);background:var(--control-fill);border-radius:6px;color:#ddd3ed}
+body .preview-favorite[aria-pressed="true"]{background:#c3a1e62b;border-color:#dcb9f486;color:#f0d4ff}
+body .icon-button{min-width:32px;min-height:32px;border:1px solid #b9c3e344;background:#bac3e70b;border-radius:6px}
+body .detail-prompt-heading button,body .detail-secondary button,body .collection-toast #undo-trash{min-height:33px;padding:6px 10px;font-size:11px;border:1px solid var(--control-line);border-radius:6px;background:var(--control-fill);color:var(--control-text)}
+body #detail-trash{border-color:#d7a8bf45;background:#ce91af09;color:#e2bdcf}
+body .detail-secondary button[aria-pressed="true"]{color:#f1d3ff;background:#c79ae722;border-color:#dcb7f279}
+body .collection-toast .icon-button{min-width:28px;min-height:28px}
+
+/* Filters are a segmented glass switch, rather than a line of captions. */
+body .works-toolbar{gap:7px;align-items:center;padding:6px;border:1px solid #becaea38;border-radius:12px;background:linear-gradient(110deg,#101b33cc,#20233cc7);box-shadow:inset 0 1px 0 #ffffff08;margin-top:23px}
+body .works-toolbar button{min-height:40px;font-size:13px;line-height:1.4;gap:8px;padding:9px 16px;border:1px solid #b9c8e43d;border-radius:7px;background:#a6b5df0b;color:#d5dded}
+body .works-toolbar button[aria-pressed="true"]{color:var(--control-ink);background:linear-gradient(120deg,#e4d4f8,#c5b9e7);border-color:#f3e4ff;box-shadow:0 2px 12px #b59ae529,inset 0 1px 0 #ffffff8c}
+body .works-toolbar button[aria-pressed="true"]:after{display:none}
+body .works-toolbar button span{display:inline-grid;place-items:center;min-width:20px;min-height:20px;font-size:10px;padding:1px 5px;background:#bdc6e51a;color:#e3dbf0;border-radius:5px}
+body .works-toolbar button[aria-pressed="true"] span{background:#55416d20;color:#3c3054}
+body .works-toolbar .trash-filter{margin-left:auto}
+body .work-action{min-height:34px;padding:6px 9px;font-size:11px;border:1px solid #b4c2e13d;background:#b7c4e709;color:#d5deee}
+body .work-action[data-action="detail"]{background:#c5a6eb21;border-color:#d1b6e95e;color:#f0ddff}
+body .work-action[data-action="trash"]{color:#d8b8c8;border-color:#c99eb731;background:#c994ab08}
+body .work-action[aria-pressed="true"]{background:#c69ae52b;border-color:#d4b2ed79;color:#f0d7ff}
+body .work-action:disabled{opacity:.4;background:none;border-style:dashed;cursor:not-allowed}
+.card-open-hint{position:absolute;right:11px;bottom:11px;z-index:2;display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid #e2d0f26b;border-radius:5px;background:#17223bcb;backdrop-filter:blur(10px);color:#f2e8fc;font-size:10px}
+.card-open-hint .icon{width:12px;height:12px}
+body .still-button{border:1px solid #d3c5ed4d;border-radius:10px}
+body .still-open{display:flex;align-items:center;justify-content:center;gap:8px;width:auto;height:auto;padding:8px 12px;opacity:1;border:1px solid #e0cbef73;border-radius:6px;background:#14213bc4;color:#f7eaff;font-size:12px;transform:none}
+body .use-prompt{display:inline-flex;align-items:center;justify-content:center;gap:12px;padding:10px 14px;min-height:40px;border:1px solid #c5b2e66b;border-radius:7px;background:#b9a0df15;color:#e9d9fa;font-size:13px}
+body .form-status a{display:inline-block;padding:2px 7px;border-radius:4px;border:1px solid #d7b6ed60;background:#d6aaf01c;text-decoration:none;font-size:11px;color:#f0d7ff}
+body .works-search{border-color:#bfcae653;background:#bac5e70b}
+body .works-search input{font-size:12px}
+body .prompt-shell:focus-within,body .works-search:focus-within{border-color:#ddbcf9a8;background-color:#b49bde12;box-shadow:0 0 0 3px #bd9fe719}
+body .generation-settings select,body .duration-field input{border-color:#bdc9e45e;background-color:#aabbe411;transition:border-color 160ms ease,background-color 160ms ease,box-shadow 160ms ease}
+body .generation-settings select:focus-visible,body .duration-field input:focus-visible,body .works-search input:focus-visible{outline:2px solid #ead6ff;outline-offset:3px}
+
+@media(hover:hover){
+  body :is(.main-nav a,.workspace-button,.new-scene-button,.studio-nav a,.sidebar-bottom>a,.hero-footer>a,.closing-action,.secondary-button,.rename-trigger,.preview-favorite,.icon-button,.detail-prompt-heading button,.detail-secondary button,.use-prompt,.work-action,.prompt-suggestions button,.duration-advice button,#scene-motion-toggle):not(:disabled):hover{background-color:#c7a9ed30;border-color:#e0c2f5a3;color:#faf2ff;box-shadow:0 3px 15px #7e55bd20,inset 0 1px 0 #ffffff13;transform:translateY(-1px)}
+  body .works-toolbar button:not([aria-pressed="true"]):hover{background:#c7b3ee26;border-color:#e0c7f28c;color:#fff0ff;box-shadow:inset 0 1px 0 #ffffff0c}
+  body .works-toolbar button[aria-pressed="true"]:hover{background:#eee0ff;border-color:#fff2ff;color:#201a32}
+  body .generate-button:not(:disabled):hover,body .composer-panel .generate-button:not(:disabled):hover{box-shadow:0 7px 30px #b573ed55,inset 0 1px 0 #ffffff40;transform:translateY(-2px)}
+  body .work-open:hover .card-open-hint,body .still-button:hover .still-open{background:#cfb4ef;color:#28213b;border-color:#ead7ff;box-shadow:0 4px 18px #090d254d}
+  body .work-open:hover{background:#bca4e70a}
+  body .generation-settings select:hover,body .duration-field input:hover,body .works-search:hover{border-color:#d7b6ee99;background-color:#b3b9e91b}
+}
+/* Press comes after hover so it remains visible under the pointer. */
+body :is(.main-nav a,.workspace-button,.new-scene-button,.studio-nav a,.sidebar-bottom>a,.hero-footer>a,.closing-action,.secondary-button,.rename-trigger,.preview-favorite,.icon-button,.detail-prompt-heading button,.detail-secondary button,.use-prompt,.work-action,.prompt-suggestions button,.duration-advice button,#scene-motion-toggle,.works-toolbar button,.generate-button):not(:disabled):active{transform:translateY(1px) scale(.98);box-shadow:inset 0 2px 6px #060b2b55}
+@media(max-width:950px){body .main-nav{gap:7px;margin-right:20px}body .main-nav a{padding:9px 11px;font-size:12px}body .works-toolbar button{padding:9px 12px}}
+@media(min-width:901px) and (max-height:820px){body #detail-parameters{grid-template-columns:54px minmax(0,1.1fr) 42px minmax(0,.8fr);gap:12px 8px;margin:20px 0;padding-bottom:18px}body .detail-content{padding-top:23px;padding-bottom:23px}body .detail-actions{margin-top:20px}body .detail-secondary{margin-top:16px;padding-top:13px}}
+@media(max-width:920px){body .studio-nav a{font-size:0}body .works-toolbar .trash-filter{margin-left:0}}
+@media(max-width:760px){body .main-nav a{font-size:11px;padding:8px 10px}body .main-nav{gap:5px;margin-right:8px}body .workspace-button{font-size:11px;padding:9px 11px;gap:8px}}
+@media(max-width:510px){body .works-toolbar{gap:6px}body .works-toolbar button{min-height:40px;font-size:12px;padding:9px 10px}body .preview-management{gap:5px}body .rename-trigger{padding:6px 8px;font-size:10px}body .work-action{font-size:11px}body .prompt-suggestions button{font-size:11px;padding:6px 9px}}
+@media(prefers-reduced-motion:reduce){body :where(button,a[href],input,select){transition:none!important;animation:none!important}body :where(button,a[href]):not(:disabled):is(:hover,:active){transform:none!important}.press-wave{display:none}}
+.reference-panel{display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:10px;margin:0 0 15px;padding:10px;border:1px solid #d8b9ef69;border-radius:9px;background:linear-gradient(110deg,#b3a0d72b,#b2c5e40d)}
+.reference-panel img{width:64px;height:44px;object-fit:cover;border-radius:5px;border:1px solid #ddd0ec3b}
+.reference-panel strong{display:block;font-size:11px;font-weight:400;color:#edddfa;line-height:1.6}.reference-panel p{font-size:9px;line-height:1.7;color:#bdc8de;margin:3px 0 0}
+body #remove-reference{font-size:10px;min-height:32px;border:1px solid #cbb5df63;border-radius:6px;padding:6px 8px;background:#d3c0ec15;color:#f0e0fc}
+body #remove-reference:hover{background:#ddc9f335;border-color:#ead4ff}
+.generation-mode{font-size:10px;line-height:1.8;margin:0 0 13px;color:#c4cce0}
+body .generation-settings select:disabled{opacity:.55;cursor:not-allowed;background:#aabbe40a;border-color:#bdc9e43b}
+@media(max-width:510px){.reference-panel{grid-template-columns:58px minmax(0,1fr)}.reference-panel img{width:58px;height:44px}#remove-reference{grid-column:2;justify-self:start}}

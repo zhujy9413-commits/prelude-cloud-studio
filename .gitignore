@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+.openai/local/
+*.tar.gz
+*.log
+.env*
+!.env.example
+__pycache__/
+.studio/
+video-production/.state/
+preview/
+.openai/

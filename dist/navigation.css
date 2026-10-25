@@ -1,0 +1,18 @@
+@view-transition{navigation:auto}
+html{background:#0b1229}
+::view-transition-group(root){animation-duration:520ms;animation-timing-function:cubic-bezier(.22,.61,.36,1)}
+::view-transition-old(root){animation:scene-depart 520ms cubic-bezier(.22,.61,.36,1) both;mix-blend-mode:normal}
+::view-transition-new(root){animation:scene-arrive 520ms cubic-bezier(.22,.61,.36,1) both;mix-blend-mode:normal}
+@keyframes scene-depart{to{transform:translateY(-5px)}}
+@keyframes scene-arrive{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+html.nav-leaving body{opacity:0;transition:opacity 180ms ease}
+html.nav-entering body{animation:page-arrive 360ms ease both}
+html.nav-entering main{animation:content-arrive 420ms cubic-bezier(.22,.61,.36,1) both}
+@keyframes page-arrive{from{opacity:0}to{opacity:1}}
+@keyframes content-arrive{from{transform:translateY(7px)}to{transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){
+  @view-transition{navigation:none}
+  ::view-transition-group(root),::view-transition-old(root),::view-transition-new(root){animation:none!important}
+  html.nav-leaving body{opacity:1;transition:none}
+  html.nav-entering body,html.nav-entering main{animation:none!important}
+}
