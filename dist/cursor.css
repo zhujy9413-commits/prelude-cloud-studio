@@ -1,0 +1,19 @@
+/* The point stays under the mouse; only its short light trail follows. */
+.studio-cursor{position:fixed;inset:0;z-index:2147483647;pointer-events:none!important;opacity:0;transition:opacity 80ms ease;overflow:visible}
+.studio-cursor *{pointer-events:none!important}
+.studio-cursor.is-visible{opacity:1}
+.studio-cursor__trail{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.studio-cursor__trail path{fill:none;stroke:url(#prelude-comet-gradient);stroke-linecap:round;stroke-linejoin:round}
+.studio-cursor__trail .comet-bloom{stroke-width:5;opacity:.15;filter:blur(1.5px)}
+.studio-cursor__trail .comet-line{stroke-width:1.5;opacity:.65}
+.studio-cursor__point{position:absolute;left:0;top:0;width:0;height:0;will-change:transform}
+.studio-cursor__spark{position:absolute;width:18px;height:18px;left:-9px;top:-9px;overflow:visible;transform:rotate(var(--cursor-tilt,0deg));filter:drop-shadow(0 0 3px #d7bdff80);transition:opacity 110ms ease,scale 180ms ease,rotate 140ms ease}
+.studio-cursor__arrow{position:absolute;width:20px;height:23px;left:-1px;top:-1px;overflow:visible;opacity:0;scale:.72;transform-origin:1px 1px;filter:drop-shadow(0 1px 2px #070d2ab3);transition:opacity 100ms ease,scale 160ms cubic-bezier(.2,.8,.3,1.3)}
+.studio-cursor.is-action .studio-cursor__spark{opacity:0;scale:.55}
+.studio-cursor.is-action .studio-cursor__arrow{opacity:1;scale:1}
+.studio-cursor.is-down .studio-cursor__spark{scale:.68;filter:drop-shadow(0 0 6px #e9ceff)}
+.studio-cursor.is-down .studio-cursor__arrow{scale:.8;filter:drop-shadow(0 0 5px #d5b6ff99)}
+@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+  html.has-studio-cursor,html.has-studio-cursor *{cursor:none!important}
+}
+@media(hover:none),(pointer:coarse),(prefers-reduced-motion:reduce),(forced-colors:active){.studio-cursor{display:none!important}}

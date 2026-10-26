@@ -15,7 +15,9 @@
   const draftKey = 'prelude.cloud.draft.v1', libraryKey = 'prelude.cloud.plans.v1', pendingKey = 'prelude.cloud.request.v1';
   const terminal = new Set(['SUCCEEDED', 'FAILED', 'REJECTED', 'UNCERTAIN', 'UNAVAILABLE']);
   const labels = { SUBMITTING:'正在提交镜头', PENDING:'镜头正在排队', RUNNING:'正在生成你的下一幕', DOWNLOADING:'正在保存你的视频', SUCCEEDED:'视频已生成', FAILED:'这次未能完成', REJECTED:'这次未能提交', UNCERTAIN:'正在等待任务核对', UNAVAILABLE:'视频暂不可用' };
-  let referenceKey = null;
+  const promptPlaceholder = input.placeholder, promptHint = $('.prompt-meta > span').textContent;
+  let referenceKey = null, motionGuide = null;
+  let uploadedReference = null, uploading = false, supportsUpload = false;
   let selected = 'cloud', currentPlan = null, currentJob = null, savedCurrentId = null;
   let csrf = '', ready = false, posting = false, syncing = false, jobs = [], deletedJobs = [], timer = null, disconnected = false;
   let collection = null, supportsReference = false;
@@ -40,30 +42,44 @@
     updateCost();
   }
   function updateCount() { $('#prompt-count').textContent = `${input.value.length} / 1200`; updateDuration(); }
-  function saveDraft() { writeJSON(draftKey, { reference_preset:referenceKey, prompt: input.value, aspect: $('#aspect').value, duration: $('#duration').value, preset: selected }); }
+  function hasReference() { return Boolean(referenceKey || uploadedReference); }
+  function isUpload(value) { return value && typeof value.id==='string' && /^[a-f0-9-]{36}$/.test(value.id) && typeof value.name==='string' && /^\d{1,4}:\d{1,4}$/.test(value.aspect); }
+  function saveDraft() { writeJSON(draftKey, { reference_preset:referenceKey, reference_upload:uploadedReference, prompt: input.value, aspect: $('#aspect').value, duration: $('#duration').value, preset: selected }); }
   function updateCost() {
     if (!durationInput.validity.valid) { $('#generation-cost').textContent = '请填写 2–15 秒的整数时长'; return; }
     const seconds = effectiveDuration(), automatic = durationInput.value === '';
-    $('#generation-cost').textContent = `${referenceKey?'首帧生视频 · ':'文生视频 · '}720P · ${automatic ? (input.value.trim() ? '按建议 ' : '默认 ') : ''}${seconds} 秒标价 ¥${(seconds * (referenceKey ? .3 : .6)).toFixed(2)} · 可用免费额度优先抵扣`;
+    $('#generation-cost').textContent = `${hasReference()?'首帧生视频 · ':'文生视频 · '}720P · ${automatic ? (input.value.trim() ? '按建议 ' : '默认 ') : ''}${seconds} 秒标价 ¥${(seconds * (hasReference() ? .3 : .6)).toFixed(2)} · 可用免费额度优先抵扣`;
   }
   function setSelected(key) { if (!isPreset(key)) return; selected = key; $$('.prompt-suggestions [data-preset]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.preset === key))); }
   function focusComposer() { $('#create').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }); input.focus({ preventScroll: true }); }
-  function setReference(key) {
+  function setReference(key, upload = null) {
     referenceKey=isPreset(key)?key:null;
-    $('#reference-panel').hidden=!referenceKey;$('#generation-mode').hidden=Boolean(referenceKey);
-    $('#generation-mode').textContent=referenceKey?'首帧生视频 · 使用已选图片引导画面，后续动作仍可能出现变化':'文生视频 · 根据文字重新构图，不使用示例图片';
-    $('#aspect').disabled=Boolean(referenceKey);
-    $('#aspect').title=referenceKey?'画幅跟随参考首帧，移除首帧后可修改':'';
-    if(referenceKey){$('#aspect').value='16:9';$('#reference-image').src=presets[referenceKey].image;$('#reference-title').textContent=`参考首帧 · ${presets[referenceKey].title}`;}
-    if(workspace)$('.model-summary small').textContent=referenceKey?'单镜头 · 首帧生视频':'单镜头 · 文生视频';
+    uploadedReference=!referenceKey&&isUpload(upload)?{id:upload.id,name:upload.name,aspect:upload.aspect,width:upload.width,height:upload.height,image_url:`/api/references/${upload.id}/image`}:null;
+    const frame=uploadedReference||(referenceKey?{name:presets[referenceKey].title,image_url:presets[referenceKey].image,aspect:'16:9'}:null);
+    $('#reference-panel').hidden=!frame;$('#generation-mode').hidden=Boolean(frame);
+    $('#generation-mode').textContent=frame?'首帧生视频 · 使用已选图片引导画面，后续动作仍可能出现变化':'文生视频 · 根据文字重新构图，不使用示例图片';
+    const aspect=$('#aspect');aspect.querySelector('[data-upload-aspect]')?.remove();
+    aspect.disabled=Boolean(frame);aspect.title=frame?'画幅跟随参考首帧，移除首帧后可修改':'';
+    if(frame){
+      if(![...aspect.options].some(option=>option.value===frame.aspect)){const option=new Option(`${frame.aspect} · 原图`,frame.aspect);option.dataset.uploadAspect='';aspect.add(option);}
+      aspect.value=frame.aspect;$('#reference-image').src=frame.image_url;$('#reference-image').alt=`${frame.name} 参考首帧`;
+      $('#reference-title').textContent=`${uploadedReference?'上传首帧':'参考首帧'} · ${frame.name}`;
+      $('#reference-description').textContent=uploadedReference?`${frame.width} × ${frame.height} · 点击图片预览首帧`:'此图将作为视频首帧 · 保留横屏构图与光影基调';
+    }else if(!['16:9','9:16','1:1'].includes(aspect.value))aspect.value='16:9';
+    input.placeholder=frame?'写下希望发生的动作，或试试下方的「帮我写动作」':promptPlaceholder;
+    $('.prompt-meta > span').textContent=frame?'描述动作、镜头与节奏':promptHint;
+    motionGuide?.setFrame(frame?{...frame,id:uploadedReference?.id||referenceKey}:null,referenceKey);
+    $('#upload-reference span').textContent=uploadedReference?'更换参考图':'上传参考图';
+    if(uploadedReference)$$('.prompt-suggestions [data-preset]').forEach(button=>button.setAttribute('aria-pressed','false'));
+    if(workspace)$('.model-summary small').textContent=frame?'单镜头 · 首帧生视频':'单镜头 · 文生视频';
     if(workspace && !currentJob && !$('#workspace-welcome').hidden){
-      $('#preview-image').src=presets[referenceKey||'cloud'].image;
-      $('#preview-image').alt=referenceKey?`${presets[referenceKey].title} 参考首帧`:'暮色云海灵感画面';
-      $('#workspace-welcome h2').textContent=referenceKey?'让这一帧，流动起来':'下一幕，等你来导演';
-      $('#workspace-welcome p').textContent=referenceKey?'From this frame':'Your next masterpiece';
-      $('#workspace-welcome small').textContent=referenceKey?'此图将作为首帧 · 当前尚未生成视频':'在左侧写下一句话，让画面从想象中走来';
-      $('#preview-title').textContent=referenceKey?`参考首帧 · ${presets[referenceKey].title}`:'画面预览';
-      $('#preview-spec').textContent=referenceKey?'16:9 · 等待生成':'等待你的下一幕';
+      $('#preview-image').src=frame?.image_url||presets.cloud.image;
+      $('#preview-image').alt=frame?`${frame.name} 参考首帧`:'暮色云海灵感画面';
+      $('#workspace-welcome h2').textContent=frame?'让这一帧，流动起来':'下一幕，等你来导演';
+      $('#workspace-welcome p').textContent=frame?'From this frame':'Your next masterpiece';
+      $('#workspace-welcome small').textContent=frame?'此图将作为首帧 · 当前尚未生成视频':'在左侧写下一句话，让画面从想象中走来';
+      $('#preview-title').textContent=frame?`参考首帧 · ${frame.name}`:'画面预览';
+      $('#preview-spec').textContent=frame?`${frame.aspect} · 等待生成`:'等待你的下一幕';
     }
     updateCost();
   }
@@ -72,12 +88,21 @@
     city:'延续首帧中的雨夜街道、透明雨伞和深色长外套人物，人物缓慢向前行走，镜头从背后平稳跟随并保持原有景别与距离，细密雨丝持续落下，积水泛起轻微涟漪，保留原图暗部层次、暖色灯笼与冷色霓虹的对比，连续单镜头，不切换场景',
     lunar:'延续首帧中的月面、宇航员和远处地球，宇航员缓慢向前迈步，尘埃轻微扬起，镜头以广角平稳缓慢后退，保持原图的地平线、光线方向与科幻电影色调，连续单镜头，不切换场景'
   };
-  function fillPreset(key, scroll = true) { if (!isPreset(key)) return; setSelected(key);setReference(key); input.value = motionPrompts[key]; updateCount(); saveDraft(); if (!activeJob()) status.textContent = '已附上参考首帧，可以继续调整动作描述'; if (scroll) focusComposer(); }
+  motionGuide=window.PreludeMotionGuide.create({input,onApply:prompt=>{
+    input.value=prompt;updateCount();saveDraft();
+    if(!activeJob()&&!pendingRequest)status.textContent='描述已更新，确认时长后即可生成';
+  }});
+  function fillPreset(key, scroll = true) { if (!isPreset(key)) return; motionGuide.clearUndo();setSelected(key);setReference(key); input.value = motionPrompts[key]; updateCount(); saveDraft(); if (!activeJob()) status.textContent = '已附上参考首帧，可以继续调整动作描述'; if (scroll) focusComposer(); }
   function setBusy() {
     const job = activeJob();
-    submit.disabled = posting || Boolean(job) || !ready;
-    form.setAttribute('aria-busy', String(posting || Boolean(job)));
-    $('#generate-label').textContent = posting ? '正在提交' : job ? (job.status === 'UNCERTAIN' ? '等待任务核对' : '正在生成视频') : pendingRequest ? '核对上次提交' : '生成我的视频';
+    submit.disabled = uploading || posting || Boolean(job) || !ready;
+    form.setAttribute('aria-busy', String(uploading || posting || Boolean(job)));
+    $('#generate-label').textContent = uploading ? '正在准备首帧' : posting ? '正在提交' : job ? (job.status === 'UNCERTAIN' ? '等待任务核对' : '正在生成视频') : pendingRequest ? '核对上次提交' : '生成我的视频';
+    const referenceBusy=uploading||posting||Boolean(pendingRequest);
+    motionGuide?.setBusy(referenceBusy);
+    $('#use-preview').disabled=referenceBusy;
+    if(workspace)$('#detail-reuse').disabled=referenceBusy;
+    $$('#upload-reference,#remove-reference,[data-preset],[data-new-scene]').forEach(button=>button.disabled=referenceBusy);
     if (workspace) {
       const connection = $('#workspace-connection'); connection.classList.toggle('is-offline', disconnected || !ready);
       connection.replaceChildren(document.createElement('i'), document.createTextNode(disconnected ? '工作室连接中断' : ready ? '工作室已就绪' : '正在连接工作室'));
@@ -98,6 +123,29 @@
       return body;
     } finally { clearTimeout(timeout); }
   }
+  async function uploadImage(file) {
+    if(uploading||posting||pendingRequest)return;
+    const type=file.type==='image/jpg'?'image/jpeg':file.type;
+    if(!['image/jpeg','image/png','image/webp'].includes(type)){status.textContent='请选择 JPG、PNG 或 WebP 图片';return;}
+    if(!file.size||file.size>10*1024*1024){status.textContent='图片请控制在 10 MB 以内';return;}
+    if(!csrf)await sync();
+    if(!csrf||!supportsUpload){status.textContent='图片上传暂不可用，请确认本地工作室已更新并启动';return;}
+    uploading=true;setBusy();status.textContent='正在准备你的参考首帧';
+    try{
+      const uploaded=await api('/api/references',{method:'POST',headers:{'Content-Type':type,'X-Prelude-CSRF':csrf,'X-Prelude-File-Name':encodeURIComponent(file.name)},body:file});
+      setReference(null,uploaded);saveDraft();status.textContent='首帧已准备好，写下你希望发生的动作';
+    }catch(error){status.textContent=error.code?error.message:'图片上传中断，原有参考图已保留，请重新选择';}
+    finally{uploading=false;$('#reference-file').value='';setBusy();}
+  }
+  $('#upload-reference').addEventListener('click',()=>$('#reference-file').click());
+  $('#reference-file').addEventListener('change',event=>{if(event.target.files[0])uploadImage(event.target.files[0]);});
+  $('#preview-reference').addEventListener('click',()=>{
+    $('#reference-full-image').src=$('#reference-image').getAttribute('src');$('#reference-full-title').textContent=$('#reference-title').textContent;
+    $('#reference-dialog').showModal();
+  });
+  form.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files')){event.preventDefault();if(!uploading)form.classList.add('is-dragging');}});
+  form.addEventListener('dragleave',event=>{if(!form.contains(event.relatedTarget))form.classList.remove('is-dragging');});
+  form.addEventListener('drop',event=>{event.preventDefault();form.classList.remove('is-dragging');if(event.dataTransfer.files.length!==1){status.textContent='一次选择一张参考图就好';return;}uploadImage(event.dataTransfer.files[0]);});
   function openPreview() { if (workspace) { preview.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'}); return; } if (library.open) library.close(); if (!preview.open) preview.showModal(); }
   function resetPlayer() { collection?.updatePreview(null); waiting.clear(); player.pause(); player.removeAttribute('src'); player.load(); player.hidden = true; }
   function showPreview(plan, savedId = null) {
@@ -115,24 +163,24 @@
     $('#preview-notice').textContent = '这是参考静帧，点击「按此画面生成」会把此图作为视频首帧；它会引导构图与光影，后续动作仍可能出现变化';
     $('#save-plan').hidden = false; $('#save-plan span').textContent = savedId ? '已保存镜头方案' : '保存镜头方案'; $('#save-plan').disabled = Boolean(savedId);
     $('#download-video').hidden = true; $('#download-video').removeAttribute('href'); $('#check-task').hidden = true;
-    if(!workspace)$('#use-preview').firstChild.textContent='按此画面生成';
+    $('#use-preview-label').textContent='按此画面生成';
     openPreview();
   }
   function renderJob(job) {
-    currentJob = job; currentPlan = { prompt:job.prompt, aspect:job.aspect, duration:String(job.duration), preset:selected, kind:'generated-video', reference_preset:job.reference_preset || null };
+    currentJob = job; currentPlan = { prompt:job.prompt, aspect:job.aspect, duration:String(job.duration), preset:selected, kind:'generated-video', reference_preset:job.reference_preset || null, reference_id:job.reference_id || null };
     writeJSON('prelude.workspace.selected.v1',job.id);
     if (workspace) { $('#workspace-welcome').hidden=true; $('#workspace-preview-actions').hidden=false; $('#preview-prompt').hidden=false; $('#rename-work').hidden=false; $$('#library-items [data-job-id]').forEach(card=>card.classList.toggle('is-selected',card.dataset.jobId===job.id)); }
     $('.preview-visual').classList.add('is-video'); $('#preview-image').hidden = true; $('#save-plan').hidden = true;
     $('#preview-kicker').textContent = workspace ? '02 / YOUR NEXT SCENE' : 'YOUR NEXT SCENE / 你的下一幕';
     $('#preview-title').textContent = job.title || (job.status === 'SUCCEEDED' ? titleFrom(job.prompt) : (labels[job.status] || '正在处理'));
-    $('#preview-spec').textContent = `${job.aspect} · ${job.duration} 秒 · 720P · ${job.reference_preset?'首帧生视频':'文生视频'}`;
+    $('#preview-spec').textContent = `${job.aspect} · ${job.duration} 秒 · 720P · ${job.reference_preset||job.reference_id?'首帧生视频':'文生视频'}`;
     $('#preview-prompt').textContent = job.prompt;
     const completed = job.status === 'SUCCEEDED', failed = terminal.has(job.status) && !completed;
     $('#preview-badge').hidden = !completed; $('#preview-badge').textContent = 'AI 生成视频';
     if (completed && player.getAttribute('src') !== job.video_url) { player.src = job.video_url; player.load(); }
     if (!completed && player.hasAttribute('src')) resetPlayer();
     waiting.render(job); collection?.updatePreview(job);
-    if(!workspace)$('#use-preview').firstChild.textContent='复用描述';
+    $('#use-preview-label').textContent='继续调整';
     $('#download-video').hidden = !completed;
     if (completed) $('#download-video').href = job.video_url + '?download=1'; else $('#download-video').removeAttribute('href');
     $('#check-task').hidden = completed || ['FAILED','REJECTED','UNAVAILABLE'].includes(job.status);
@@ -142,13 +190,14 @@
   function showJob(job) { currentPlan = null; resetPlayer(); renderJob(job); openPreview(); }
   function showSubmission(request, state = 'SUBMITTING', message = '') {
     currentJob = null; resetPlayer();
-    currentPlan = {prompt:request.prompt,aspect:request.aspect,duration:String(request.duration),preset:selected,kind:'generated-video',reference_preset:request.reference_preset||null};
+    currentPlan = {prompt:request.prompt,aspect:request.aspect,duration:String(request.duration),preset:selected,kind:'generated-video',reference_preset:request.reference_preset||null,reference_id:request.reference_id||null};
     if(workspace) { $('#workspace-welcome').hidden=true; $('#workspace-preview-actions').hidden=false; $('#rename-work').hidden=true; }
     $('.preview-visual').classList.add('is-video'); $('#preview-image').hidden=true; $('#preview-badge').hidden=true;
     $('#preview-kicker').textContent='YOUR NEXT SCENE / 你的下一幕';
     $('#preview-title').textContent=titleFrom(request.prompt); $('#preview-spec').textContent=`${request.aspect} · ${request.duration} 秒 · 720P`;
     $('#preview-prompt').hidden=false; $('#preview-prompt').textContent=request.prompt;
     $('#save-plan').hidden=true; $('#download-video').hidden=true; $('#check-task').hidden=state==='SUBMITTING';
+    $('#use-preview-label').textContent='继续调整';
     $('#preview-status').textContent=''; $('#preview-notice').textContent='你的描述会保留在工作室中，可以稍后回来查看进度';
     waiting.render({id:request.request_id,status:state,created_at:request.created_at || Date.now()/1000,error:message});
     openPreview();
@@ -173,9 +222,13 @@
   function renderWorkspaceLibrary() { collection?.render(); }
   function schedulePoll() { clearTimeout(timer); if (activeJob() || pendingRequest || disconnected) timer = setTimeout(() => sync(), 10000); }
   async function sync(initial = false) {
-    if (syncing) return; syncing = true;
+    if (syncing) return; syncing = true;let referenceMessage='';
     try {
-      const data = await api('/api/bootstrap'); csrf = data.csrf; ready = data.ready; supportsReference = data.reference_supported === true; jobs = data.jobs; deletedJobs = data.deleted_jobs || []; disconnected = false;
+      const data = await api('/api/bootstrap'); csrf = data.csrf; ready = data.ready; supportsReference = data.reference_supported === true; supportsUpload=data.upload_supported===true;jobs = data.jobs; deletedJobs = data.deleted_jobs || []; disconnected = false;
+      if(initial&&uploadedReference&&supportsUpload){
+        try{setReference(null,await api(`/api/references/${uploadedReference.id}`));}
+        catch(error){if(error.code==='reference_not_found'){setReference(null);saveDraft();referenceMessage='参考图已不可用，请重新上传后再生成';}else throw error;}
+      }
       if (pendingRequest && jobs.some(j => j.request_id === pendingRequest.request_id)) clearPending();
       if(workspace && !workspaceInitialized) {
         const saved=readJSON('prelude.workspace.selected.v1','initial');
@@ -188,7 +241,7 @@
       $('#library-status').textContent = '';
       if (!ready) status.textContent = '服务端还未配置百炼密钥';
       else if (pendingRequest) status.textContent = '上次提交结果待确认，再点按钮将核对同一请求';
-      else if (!activeJob() && initial) status.textContent = '';
+      else if (!activeJob() && initial) status.textContent = referenceMessage;
       else if (!activeJob() && status.querySelector('a')) status.textContent = '视频任务已更新，可在「我的作品」中查看';
     } catch {
       disconnected = true;
@@ -222,7 +275,7 @@
     if (['16:9','9:16','1:1'].includes(draft.aspect)) $('#aspect').value = draft.aspect;
     if (draft.duration === '' || duration.parse(draft.duration) !== null) durationInput.value = draft.duration;
     if (isPreset(draft.preset)) setSelected(draft.preset);
-    setReference(draft.reference_preset);
+    setReference(draft.reference_preset,draft.reference_upload);
   }
   updateCount(); updateCost();
   $('#remove-reference').addEventListener('click',()=>{const prior=referenceKey;setReference(null);if(prior&&input.value===motionPrompts[prior])input.value=presets[prior].prompt;updateCount();saveDraft();});
@@ -234,15 +287,19 @@
   $$('[data-preview]').forEach(b => b.addEventListener('click', () => { const key = b.dataset.preview; showPreview({preset:key,title:presets[key].title,prompt:motionPrompts[key],aspect:'16:9',duration:'5',kind:'concept-still'}); }));
   $$('[data-open-library]').forEach(b => b.addEventListener('click', () => { if(!workspace){location.href='workspace.html#works';return;} library.scrollIntoView({behavior:'smooth'}); sync(); }));
   $$('[data-close-dialog]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
-  [preview,library].filter(element=>element.tagName==='DIALOG').forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) { const r=dialog.getBoundingClientRect(); if (event.clientX<r.left || event.clientX>r.right || event.clientY<r.top || event.clientY>r.bottom) dialog.close(); } }));
+  [preview,library,$('#reference-dialog')].filter(element=>element.tagName==='DIALOG').forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) { const r=dialog.getBoundingClientRect(); if (event.clientX<r.left || event.clientX>r.right || event.clientY<r.top || event.clientY>r.bottom) dialog.close(); } }));
   if(!workspace) preview.addEventListener('close', () => player.pause());
   player.addEventListener('error', () => { $('#preview-status').textContent = '播放暂不可用，你仍可以下载视频后查看'; });
   $('#library-create').addEventListener('click', () => { if(!workspace) library.close(); focusComposer(); });
   $$('[data-focus-prompt]').forEach(a => a.addEventListener('click', () => input.focus({preventScroll:true})));
-  function reuseDescription(plan) {
-    input.value=plan.prompt.slice(0,1200);setSelected(plan.preset);$('#aspect').value=plan.aspect;$('#duration').value=String(plan.duration);
-    setReference(plan.reference_preset || (!plan.status && plan.kind!=='generated-video' ? plan.preset : null));
-    updateCount();saveDraft();if(!workspace)preview.close();focusComposer();if(workspace&&!activeJob())status.textContent='已复用这条描述，调整后即可创作新镜头';
+  async function reuseDescription(plan) {
+    if(uploading||posting||pendingRequest){status.textContent='请先完成当前图片准备或提交核对，再继续调整';focusComposer();return;}
+    try{
+      const uploaded=plan.reference_id?await api(`/api/references/${plan.reference_id}`):null;
+      motionGuide.clearUndo();input.value=plan.prompt.slice(0,1200);setSelected(plan.preset);$('#aspect').value=plan.aspect;$('#duration').value=String(plan.duration);
+      setReference(uploaded?null:plan.reference_preset || (!plan.status && plan.kind!=='generated-video' ? plan.preset : null),uploaded);
+      updateCount();saveDraft();if(!workspace)preview.close();focusComposer();if(!activeJob())status.textContent=`已带回${hasReference()?'参考图、':''}描述和参数，修改后再点「生成我的视频」`;
+    }catch(error){status.textContent=error.code?error.message:'暂时无法读取参考首帧，请稍后再试';}
   }
   $('#use-preview').addEventListener('click',()=>{if(currentPlan)reuseDescription(currentPlan);});
   $('#save-plan').addEventListener('click', () => {
@@ -262,7 +319,7 @@
       $('#workspace-section-name').textContent=archive?'我的作品':'创作空间';
     },{rootMargin:'-65px 0px -60% 0px'}).observe($('#works'));
     $$('[data-new-scene]').forEach(button=>button.addEventListener('click',()=>{
-      if(posting||pendingRequest){status.textContent='请先核对当前提交，再开启新镜头';focusComposer();return;}
+      if(uploading||posting||pendingRequest){status.textContent='请先完成当前图片上传或核对提交，再开启新镜头';focusComposer();return;}
       workspaceInitialized=true;writeJSON('prelude.workspace.selected.v1',null);
       currentJob=null;currentPlan=null;resetPlayer();setReference(null);input.value='';$('#aspect').value='16:9';$('#duration').value='';
       updateCount();updateCost();saveDraft();$('#preview-image').hidden=false;$('#preview-image').src=presets.cloud.image;
@@ -283,12 +340,13 @@
     });
   }
   form.addEventListener('submit', async event => {
-    event.preventDefault(); if (posting || activeJob()) return;
+    event.preventDefault(); if (uploading || posting || activeJob()) return;
     if (!input.value.trim() && !pendingRequest) { status.textContent='先写下一句话，描述你想看到的画面'; input.focus(); return; }
     if (!ready || !csrf) { await sync(true); return; }
     if ((pendingRequest?.reference_preset || referenceKey) && !supportsReference) {status.textContent='请重启本地工作室以启用参考首帧生成';return;}
+    if ((pendingRequest?.reference_id || uploadedReference) && !supportsUpload) {status.textContent='请重启本地工作室以启用图片上传生成';return;}
     if (!pendingRequest) {
-      pendingRequest={request_id:crypto.randomUUID(),prompt:input.value.trim(),aspect:$('#aspect').value,duration:effectiveDuration(),reference_preset:referenceKey};
+      pendingRequest={request_id:crypto.randomUUID(),prompt:input.value.trim(),aspect:$('#aspect').value,duration:effectiveDuration(),reference_preset:referenceKey,reference_id:uploadedReference?.id||null};
       if (!writeJSON(pendingKey,pendingRequest)) { pendingRequest=null; status.textContent='浏览器无法保存任务标识，请允许本站本地存储后再生成'; return; }
     }
     const submittedRequest = {...pendingRequest};

@@ -1,0 +1,23 @@
+body .prompt-suggestions .upload-reference{margin-left:auto;display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:7px;border-color:#ddcbf078;background:#b5a0df1f;color:#f0e8f7;white-space:nowrap}
+.upload-reference .icon{width:13px;height:13px}
+.upload-reference:disabled{opacity:.6;cursor:wait}
+body .reference-panel .reference-thumbnail{display:block;width:54px;height:38px;border:1px solid #ece3ff66;border-radius:5px;padding:0;overflow:hidden;background:#0b1025;transition:border-color .18s,box-shadow .18s}
+body .reference-panel .reference-thumbnail img{width:100%;height:100%;object-fit:cover}
+body .reference-panel .reference-thumbnail:hover{border-color:#f0dcff;box-shadow:0 0 0 3px #dbc0ff30}
+#reference-title{overflow:hidden;display:block;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+#reference-description{overflow-wrap:anywhere}
+#creation-form{position:relative}
+#creation-form.is-dragging .prompt-shell{border-color:#efd8ff;background:#9386ca47;box-shadow:0 0 0 4px #d8bcff33}
+#creation-form.is-dragging .prompt-shell:after{content:"松开图片，让这一帧开始流动";position:absolute;inset:0;display:grid;place-items:center;border-radius:inherit;background:#141d40eb;color:#f5edff;font-size:14px;letter-spacing:.04em;pointer-events:none;z-index:2}
+.reference-full-image{display:block;width:100%;max-height:68svh;object-fit:contain;background:#080e20}
+.reference-full-caption{padding:18px 22px;font-size:13px;font-weight:400}
+.reference-full-caption strong{font-weight:400;overflow-wrap:anywhere}
+.reference-full-caption p{font-size:11px;line-height:1.8;color:#b5b8d0;margin:8px 0 0}
+.detail-reference{display:flex;align-items:center;gap:12px;padding:11px;margin:0 0 22px;border:1px solid #c7c8ed38;border-radius:8px;background:#b6b3da09}
+.detail-reference img{width:80px;height:52px;border-radius:4px;object-fit:cover;flex-shrink:0}
+.detail-reference>span:nth-child(2){flex:1;min-width:0}
+.detail-reference strong{display:block;font-size:11px;font-weight:400;color:#ddd9ec}
+.detail-reference small{display:block;font-size:10px;color:#aab3cf;margin-top:5px;overflow-wrap:anywhere}
+.detail-reference:hover{background:#c4b6e41c;border-color:#e4c8ff85}
+@media(max-width:760px){body .prompt-suggestions .upload-reference{margin-left:0;min-height:36px}body .reference-panel .reference-thumbnail{width:54px;height:38px}}
+@media(prefers-reduced-motion:reduce){body .reference-panel .reference-thumbnail{transition:none}}

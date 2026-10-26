@@ -4,6 +4,7 @@ import http.client
 import importlib.util
 import json
 import base64
+import io
 import sqlite3
 from pathlib import Path
 import tempfile
@@ -11,6 +12,7 @@ import threading
 import unittest
 from unittest.mock import patch
 import urllib.error
+from PIL import Image
 
 spec = importlib.util.spec_from_file_location('studio_server', Path(__file__).resolve().parents[1] / 'server.py')
 app = importlib.util.module_from_spec(spec)
@@ -284,6 +286,73 @@ class StudioChecks(unittest.TestCase):
             provider.download('https://example.org/result.mp4', self.studio.media_dir / 'x.mp4')
         opener.assert_not_called()
 
+    def image(self, size=(800, 450), format='PNG'):
+        output=io.BytesIO(); Image.new('RGB',size,(48,72,110)).save(output,format=format)
+        return output.getvalue()
+
+    def test_upload_normalizes_deduplicates_and_persists_without_generating(self):
+        content=self.image()
+        first=self.studio.upload_reference('owner-a',content,'image/png','../海岸.png')
+        second=self.studio.upload_reference('owner-a',content,'image/png','another.png')
+        self.assertEqual(first['id'],second['id']);self.assertEqual(first['name'],'海岸.png')
+        self.assertEqual(first['aspect'],'16:9')
+        path=self.studio.reference_dir/(first['id']+'.jpg')
+        with Image.open(path) as image:
+            self.assertEqual(image.format,'JPEG');self.assertEqual(image.mode,'RGB');self.assertEqual(image.getexif(),{})
+        recovered=app.Studio(self.studio.data_dir,self.provider)
+        self.assertEqual(recovered.get_reference(first['id'],'owner-a'),first)
+        with self.assertRaises(app.StudioError):recovered.get_reference(first['id'],'owner-b')
+        self.assertEqual(self.provider.submits,0)
+
+    def test_upload_rejects_spoofed_corrupt_oversized_and_animated_images(self):
+        for content,mime in ((b'<svg onload="alert(1)"/>','image/png'),(self.image(),'image/jpeg'),(b'no image','image/webp')):
+            with self.subTest(mime=mime),self.assertRaises(app.StudioError):self.studio.upload_reference('owner-a',content,mime,'x')
+        for size in ((239,400),(9000,250),(1600,250)):
+            with self.subTest(size=size),self.assertRaises(app.StudioError):self.studio.upload_reference('owner-a',self.image(size),'image/png','x')
+        with patch.object(app,'MAX_UPLOAD_BYTES',10),self.assertRaises(app.StudioError):
+            self.studio.upload_reference('owner-a',self.image(),'image/png','x')
+        content=io.BytesIO();frames=[Image.new('RGB',(320,240),c) for c in ('red','blue')]
+        frames[0].save(content,format='PNG',save_all=True,append_images=frames[1:])
+        with self.assertRaises(app.StudioError):self.studio.upload_reference('owner-a',content.getvalue(),'image/png','animated.png')
+        self.assertEqual(self.provider.submits,0)
+
+    def test_upload_applies_orientation_and_removes_source_metadata(self):
+        source=Image.new('RGB',(800,450),'blue');exif=Image.Exif();exif[274]=6;exif[270]='private camera metadata'
+        output=io.BytesIO();source.save(output,format='JPEG',exif=exif)
+        reference=self.studio.upload_reference('owner-a',output.getvalue(),'image/jpeg','rotated.jpg')
+        self.assertEqual((reference['width'],reference['height']),(450,800))
+        self.assertEqual(reference['aspect'],'9:16')
+        with Image.open(self.studio.reference_dir/(reference['id']+'.jpg')) as normalized:
+            self.assertEqual(dict(normalized.getexif()),{})
+        self.assertEqual(self.provider.submits,0)
+
+    def test_uploaded_reference_payload_cost_identity_and_original_ratio(self):
+        reference=self.studio.upload_reference('owner-a',self.image((800,600)),'image/png','我的海岸.png')
+        payload={**self.payload,'reference_id':reference['id'],'aspect':'4:3'}
+        job=self.studio.create('owner-a',payload)
+        self.assertEqual(job['model'],app.IMAGE_MODEL);self.assertEqual(job['estimated_cost_cny'],'1.50')
+        self.assertEqual(job['reference_name'],'我的海岸.png');self.assertEqual(job['reference_image'],reference['image_url'])
+        self.assertEqual(self.studio.create('owner-a',payload)['id'],job['id'])
+        provider=object.__new__(app.Bailian)
+        with patch.object(provider,'request',return_value={'output':{'task_id':'task-upload-123456'}}) as request:
+            self.studio.provider=provider;self.studio.process(job['id'])
+        sent=request.call_args.args[1]
+        self.assertEqual(sent['model'],app.IMAGE_MODEL)
+        data=sent['input']['img_url'];self.assertTrue(data.startswith('data:image/jpeg;base64,'))
+        self.assertEqual(base64.b64decode(data.split(',',1)[1]),(self.studio.reference_dir/(reference['id']+'.jpg')).read_bytes())
+        self.assertNotIn('_reference_bytes',self.studio.public(self.studio.get(job['id'])))
+        other=self.studio.upload_reference('owner-a',self.image((900,600)),'image/png','other.png')
+        with self.assertRaises(app.StudioError):self.studio.create('owner-a',{**payload,'reference_id':other['id'],'aspect':other['aspect']})
+
+    def test_uploaded_references_cannot_cross_owners_or_supply_paths(self):
+        reference=self.studio.upload_reference('owner-a',self.image(),'image/png','safe.png')
+        for value in ('../../.env.local','https://example.org/image.png',{},[],True,'unknown'):
+            with self.subTest(value=value),self.assertRaises(app.StudioError):self.create(reference_id=value)
+        with self.assertRaises(app.StudioError):self.studio.create('owner-b',{**self.payload,'reference_id':reference['id']})
+        with self.assertRaises(app.StudioError):self.create(reference_id=reference['id'],reference_preset='city')
+        with self.assertRaises(app.StudioError):self.create(reference_id=reference['id'],aspect='9:16')
+        self.assertEqual(self.provider.submits,0)
+
 
 class HttpChecks(unittest.TestCase):
     @classmethod
@@ -319,6 +388,22 @@ class HttpChecks(unittest.TestCase):
         self.assertIn('SameSite=Strict', headers['Set-Cookie'])
         self.assertTrue(json.loads(body)['ready'])
         self.assertNotIn(b'DASHSCOPE_API_KEY', body)
+
+    def test_image_upload_http_requires_csrf_and_keeps_images_private(self):
+        _,headers,body=self.call('/api/bootstrap');cookie=headers['Set-Cookie'].split(';')[0];csrf=json.loads(body)['csrf']
+        output=io.BytesIO();Image.new('RGB',(640,360),'navy').save(output,format='PNG');content=output.getvalue()
+        def upload(auth):
+            conn=http.client.HTTPConnection('127.0.0.1',self.http.server_port,timeout=5)
+            conn.request('POST','/api/references',content,headers={'Origin':f'http://127.0.0.1:{self.http.server_port}','Cookie':cookie,'Content-Type':'image/png',**auth})
+            response=conn.getresponse();status=response.status;data=response.read();conn.close();return status,json.loads(data)
+        calls=self.provider.submits
+        self.assertEqual(upload({})[0],403)
+        status,reference=upload({'X-Prelude-CSRF':csrf});self.assertEqual(status,201)
+        self.assertEqual(self.call(reference['image_url'],cookie=cookie)[0],200)
+        self.assertEqual(self.call(reference['image_url'])[0],404)
+        self.assertEqual(self.call('/api/references/'+reference['id'])[0],404)
+        self.assertEqual(self.call('/api/references/'+reference['id'],cookie=cookie)[0],200)
+        self.assertEqual(self.provider.submits,calls)
 
     def test_cross_origin_and_missing_csrf_block_before_submit(self):
         previous_calls = self.provider.submits

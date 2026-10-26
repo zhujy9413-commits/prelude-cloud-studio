@@ -6,10 +6,12 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
 import fcntl
+import io
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import mimetypes
+import math
 import os
 from pathlib import Path
 import re
@@ -23,6 +25,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import warnings
+
+try:
+    from PIL import Image, ImageOps, UnidentifiedImageError
+except ImportError:
+    raise SystemExit('图片上传需要 Pillow，请先运行 python3 -m pip install -r requirements.txt') from None
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'video-production'))
@@ -31,6 +39,9 @@ from generate_cloudscape import config, JobError, NoRedirect
 MODEL = 'wan2.6-t2v'
 IMAGE_MODEL = 'wan2.6-i2v-flash'
 REFERENCES = {'cloud': 'cloudscape.webp', 'city': 'city.webp', 'lunar': 'lunar.webp'}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_PIXELS = 24_000_000
+UPLOAD_TYPES = {'image/jpeg': 'JPEG', 'image/png': 'PNG', 'image/webp': 'WEBP'}
 SIZES = {'16:9': '1280*720', '9:16': '720*1280', '1:1': '960*960'}
 ACTIVE = ('SUBMITTING', 'PENDING', 'RUNNING', 'DOWNLOADING', 'UNCERTAIN')
 TERMINAL = ('SUCCEEDED', 'FAILED', 'REJECTED', 'UNCERTAIN', 'UNAVAILABLE')
@@ -90,12 +101,13 @@ class Bailian:
 
     def submit(self, job):
         reference = job.get('reference_preset')
-        if reference:
-            # Only bundled reference frames are accepted; clients cannot supply paths or URLs.
-            image = ROOT / 'dist/assets' / REFERENCES[reference]
+        if reference or job.get('reference_id'):
+            # Uploaded bytes are supplied by the worker, never by a client path or URL.
+            image_bytes = job['_reference_bytes'] if job.get('reference_id') else (ROOT / 'dist/assets' / REFERENCES[reference]).read_bytes()
+            mime = 'image/jpeg' if job.get('reference_id') else 'image/webp'
             return self.request('/api/v1/services/aigc/video-generation/video-synthesis', {
                 'model': IMAGE_MODEL,
-                'input': {'prompt': job['prompt'], 'img_url': 'data:image/webp;base64,' + base64.b64encode(image.read_bytes()).decode()},
+                'input': {'prompt': job['prompt'], 'img_url': 'data:' + mime + ';base64,' + base64.b64encode(image_bytes).decode()},
                 'parameters': {'resolution': '720P', 'duration': job['duration'], 'audio': True,
                                'prompt_extend': True, 'shot_type': 'single', 'watermark': False},
             })
@@ -145,6 +157,8 @@ class Studio:
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.media_dir = self.data_dir / 'videos'
         self.media_dir.mkdir(exist_ok=True, mode=0o700)
+        self.reference_dir = self.data_dir / 'references'
+        self.reference_dir.mkdir(exist_ok=True, mode=0o700)
         self.db_path = self.data_dir / 'studio.sqlite3'
         self.provider = provider
         self.daily_limit = daily_limit_cents
@@ -170,6 +184,13 @@ class Studio:
                 db.execute("ALTER TABLE jobs ADD COLUMN model TEXT NOT NULL DEFAULT 'wan2.6-t2v'")
             if 'reference_preset' not in columns:
                 db.execute('ALTER TABLE jobs ADD COLUMN reference_preset TEXT')
+            if 'reference_id' not in columns:
+                db.execute('ALTER TABLE jobs ADD COLUMN reference_id TEXT')
+            db.execute('''CREATE TABLE IF NOT EXISTS reference_images (
+                id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL,
+                width INTEGER NOT NULL, height INTEGER NOT NULL, aspect TEXT NOT NULL,
+                size INTEGER NOT NULL, digest TEXT NOT NULL, created_at REAL NOT NULL,
+                UNIQUE(owner,digest))''')
             db.execute("UPDATE jobs SET status='UNCERTAIN', error=? WHERE status='SUBMITTING' AND task_id IS NULL",
                        ('提交时服务重启，结果需要人工核对；不会自动重新提交',))
         os.chmod(self.db_path, 0o600)
@@ -200,12 +221,80 @@ class Studio:
         return dict(row)
 
     def public(self, job):
+        uploaded = self.get_reference(job['reference_id'], job['owner']) if job.get('reference_id') else None
         return {**{key: job[key] for key in ('id', 'request_id', 'title', 'prompt', 'aspect', 'duration', 'status', 'created_at', 'error')},
                 'favorite': bool(job['favorite']), 'deleted_at': job['deleted_at'],
                 'model': job['model'], 'reference_preset': job['reference_preset'],
-                'reference_image': '/assets/' + REFERENCES[job['reference_preset']] if job['reference_preset'] in REFERENCES else None,
+                'reference_id': job.get('reference_id'),
+                'reference_name': uploaded['name'] if uploaded else None,
+                'reference_image': uploaded['image_url'] if uploaded else '/assets/' + REFERENCES[job['reference_preset']] if job['reference_preset'] in REFERENCES else None,
                 'resolution': '720P', 'estimated_cost_cny': f"{job['cost_cents']/100:.2f}",
                 'video_url': '/api/generations/' + job['id'] + '/video' if job['status'] == 'SUCCEEDED' and job['deleted_at'] is None else None}
+
+    def get_reference(self, reference_id, owner):
+        if not isinstance(reference_id, str) or not re.fullmatch(r'[a-f0-9-]{36}', reference_id):
+            raise StudioError('参考图无效，请重新上传', 400, 'invalid_reference')
+        with self.db() as db:
+            row = db.execute('SELECT * FROM reference_images WHERE id=? AND owner=?', (reference_id, owner)).fetchone()
+        if row is None:
+            raise StudioError('未找到这张参考图，请重新上传', 404, 'reference_not_found')
+        return {key: row[key] for key in ('id', 'name', 'width', 'height', 'aspect', 'size')} | {'image_url': '/api/references/' + reference_id + '/image'}
+
+    def upload_reference(self, owner, content, content_type, name):
+        if content_type not in UPLOAD_TYPES:
+            raise StudioError('请选择 JPG、PNG 或 WebP 图片', 415, 'image_type')
+        if not content or len(content) > MAX_UPLOAD_BYTES:
+            raise StudioError('图片请控制在 10 MB 以内', 413, 'image_size')
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('error', Image.DecompressionBombWarning)
+                with Image.open(io.BytesIO(content)) as source:
+                    if source.format != UPLOAD_TYPES[content_type] or getattr(source, 'n_frames', 1) != 1:
+                        raise StudioError('请选择单张静态的 JPG、PNG 或 WebP 图片', 400, 'image_type')
+                    width, height = source.size
+                    if not 240 <= min(width, height) or max(width, height) > 8000 or width * height > MAX_IMAGE_PIXELS:
+                        raise StudioError('图片短边至少 240 像素，最长边不超过 8000 像素，总像素不超过 2400 万', 400, 'image_dimensions')
+                    if not .25 <= width / height <= 4:
+                        raise StudioError('图片过于狭长，请使用长宽比 1:4 到 4:1 之间的图片', 400, 'image_ratio')
+                    source.verify()
+                with Image.open(io.BytesIO(content)) as source:
+                    image = ImageOps.exif_transpose(source).convert('RGBA')
+                    image.thumbnail((2560, 2560), Image.Resampling.LANCZOS)
+                    clean = Image.new('RGB', image.size, (11, 16, 37))
+                    clean.paste(image, mask=image.getchannel('A'))
+                    output = io.BytesIO()
+                    clean.save(output, format='JPEG', quality=92, optimize=True)
+                    normalized = output.getvalue()
+                    width, height = clean.size
+        except StudioError:
+            raise
+        except (UnidentifiedImageError, OSError, ValueError, SyntaxError, Image.DecompressionBombWarning, Image.DecompressionBombError):
+            raise StudioError('这张图片无法读取，请换一张完整的图片', 400, 'invalid_image') from None
+        aspect = next((key for key, ratio in (('16:9', 16/9), ('9:16', 9/16), ('1:1', 1)) if abs(width/height-ratio) < .005), None)
+        divisor = math.gcd(width, height)
+        aspect = aspect or f'{width//divisor}:{height//divisor}'
+        name = re.sub(r'[\x00-\x1f\x7f]', '', str(name or '我的参考图')).replace('\\', '/').rsplit('/', 1)[-1][:80] or '我的参考图'
+        digest = hashlib.sha256(normalized).hexdigest()
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            existing = db.execute('SELECT id FROM reference_images WHERE owner=? AND digest=?', (owner, digest)).fetchone()
+            if existing:
+                reference_id = existing['id']
+            else:
+                total = db.execute('SELECT COUNT(*),COALESCE(SUM(size),0) FROM reference_images WHERE owner=?', (owner,)).fetchone()
+                if total[0] >= 100 or total[1] + len(normalized) > 200 * 1024 * 1024:
+                    raise StudioError('当前工作室的参考图存储已满，请先使用已有参考图', 429, 'reference_limit')
+                reference_id = str(uuid.uuid4())
+                target = self.reference_dir / (reference_id + '.jpg')
+                try:
+                    with target.open('xb') as handle:
+                        os.chmod(target, 0o600)
+                        handle.write(normalized)
+                    db.execute('INSERT INTO reference_images VALUES(?,?,?,?,?,?,?,?,?)', (reference_id, owner, name, width, height, aspect, len(normalized), digest, time.time()))
+                except Exception:
+                    target.unlink(missing_ok=True)
+                    raise
+        return self.get_reference(reference_id, owner)
 
     def create(self, owner, payload):
         if not isinstance(payload, dict):
@@ -213,14 +302,20 @@ class Studio:
         prompt = payload.get('prompt')
         aspect, duration = payload.get('aspect'), payload.get('duration')
         reference = payload.get('reference_preset')
+        reference_id = payload.get('reference_id')
         request_id = payload.get('request_id', '')
         if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 1200:
             raise StudioError('请输入 1 到 1200 字的画面描述')
         prompt = prompt.strip()
-        if not isinstance(aspect, str) or aspect not in SIZES or type(duration) is not int or not 2 <= duration <= 15:
+        if not isinstance(aspect, str) or (not reference_id and aspect not in SIZES) or type(duration) is not int or not 2 <= duration <= 15:
             raise StudioError('请选择支持的画幅，并填写 2 到 15 之间的整数秒数')
         if reference is not None and (not isinstance(reference, str) or reference not in REFERENCES):
             raise StudioError('请选择工作室提供的参考首帧')
+        if reference is not None and reference_id is not None:
+            raise StudioError('每次生成只能使用一张参考首帧')
+        uploaded = self.get_reference(reference_id, owner) if reference_id is not None else None
+        if uploaded and aspect != uploaded['aspect']:
+            raise StudioError('画幅需要跟随参考图，请重新选择图片', 400, 'reference_aspect')
         if reference and aspect != '16:9':
             raise StudioError('当前示例首帧使用 16:9 横屏，请移除首帧后再调整画幅')
         if reference and not (ROOT / 'dist/assets' / REFERENCES[reference]).is_file():
@@ -233,7 +328,7 @@ class Studio:
             if old:
                 if old['owner'] != owner:
                     raise StudioError('浏览器会话已改变，请先核对原作品；不会重复提交', 403, 'request_session_changed')
-                if (old['prompt'], old['aspect'], old['duration'], old['reference_preset']) != (prompt, aspect, duration, reference):
+                if (old['prompt'], old['aspect'], old['duration'], old['reference_preset'], old['reference_id']) != (prompt, aspect, duration, reference, reference_id):
                     raise StudioError('此请求已提交，请先核对原任务', 409, 'request_conflict')
                 return self.public(dict(old))
             if self.provider is None:
@@ -243,12 +338,12 @@ class Studio:
             china = timezone(timedelta(hours=8))
             day_start = datetime.now(china).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
             spent = db.execute("SELECT COALESCE(SUM(cost_cents),0) FROM jobs WHERE created_at>=? AND status NOT IN ('FAILED','REJECTED')", (day_start,)).fetchone()[0]
-            cost = duration * (30 if reference else 60)
+            cost = duration * (30 if reference or reference_id else 60)
             if spent + cost > self.daily_limit:
                 raise StudioError('今天的本地生成预算已达到上限，请明天继续', 429, 'daily_limit')
             now, job_id = time.time(), str(uuid.uuid4())
-            db.execute('''INSERT INTO jobs(id,owner,request_id,prompt,aspect,duration,cost_cents,created_at,updated_at,status,model,reference_preset)
-                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', (job_id, owner, request_id, prompt, aspect, duration, cost, now, now, 'SUBMITTING', IMAGE_MODEL if reference else MODEL, reference))
+            db.execute('''INSERT INTO jobs(id,owner,request_id,prompt,aspect,duration,cost_cents,created_at,updated_at,status,model,reference_preset,reference_id)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''', (job_id, owner, request_id, prompt, aspect, duration, cost, now, now, 'SUBMITTING', IMAGE_MODEL if reference or reference_id else MODEL, reference, reference_id))
         self.wake.set()
         return self.public(self.get(job_id))
 
@@ -295,6 +390,11 @@ class Studio:
             return
         if job['status'] == 'SUBMITTING':
             try:
+                if job.get('reference_id'):
+                    try:
+                        job['_reference_bytes'] = (self.reference_dir / (job['reference_id'] + '.jpg')).read_bytes()
+                    except OSError:
+                        raise ProviderError('参考图暂不可读取，请重新上传；本次尚未提交生成', rejected=True) from None
                 body = self.provider.submit(job)
                 output = body.get('output', {})
                 task_id = output.get('task_id')
@@ -451,11 +551,20 @@ class Handler(BaseHTTPRequestHandler):
         if self.command in ('GET', 'HEAD'):
             if path == '/api/bootstrap':
                 return self.json_response({'csrf': self.csrf, 'ready': studio.provider is not None, 'model': MODEL,
-                    'reference_supported': True, 'reference_model': IMAGE_MODEL,
+                    'reference_supported': True, 'upload_supported': True, 'upload_max_bytes': MAX_UPLOAD_BYTES, 'reference_model': IMAGE_MODEL,
                     'price_per_second_cny': '0.60', 'daily_limit_cny': f'{studio.daily_limit/100:.2f}', 'poll_seconds': studio.poll_seconds,
                     'jobs': studio.list_jobs(self.owner), 'deleted_jobs': studio.list_jobs(self.owner, deleted=True)})
             if path == '/api/generations':
                 return self.json_response({'jobs': studio.list_jobs(self.owner, deleted=urllib.parse.parse_qs(parsed.query).get('deleted') == ['1'])})
+            reference_match = re.fullmatch(r'/api/references/([a-f0-9-]{36})(/image)?', path)
+            if reference_match:
+                reference = studio.get_reference(reference_match[1], self.owner)
+                if reference_match[2]:
+                    image = studio.reference_dir / (reference['id'] + '.jpg')
+                    if not image.is_file():
+                        raise StudioError('参考图暂不可读取，请重新上传', 404, 'reference_not_found')
+                    return self.file_response(image)
+                return self.json_response(reference)
             match = re.fullmatch(r'/api/generations/([a-f0-9-]{36})(/video)?', path)
             if match:
                 job = studio.get(match[1], self.owner)
@@ -476,9 +585,23 @@ class Handler(BaseHTTPRequestHandler):
             return self.file_response(target)
         rename_match = re.fullmatch(r'/api/generations/([a-f0-9-]{36})/rename', path)
         manage_match = re.fullmatch(r'/api/generations/([a-f0-9-]{36})/(favorite|trash|restore)', path)
-        if self.command == 'POST' and (path == '/api/generations' or rename_match or manage_match):
+        if self.command == 'POST' and (path in ('/api/generations', '/api/references') or rename_match or manage_match):
             if not secrets.compare_digest(self.headers.get('X-Prelude-CSRF', ''), self.csrf):
                 raise StudioError('页面会话已变化，请刷新后核对任务', 403, 'csrf')
+            if path == '/api/references':
+                try:
+                    size = int(self.headers.get('Content-Length', '0'))
+                except ValueError:
+                    raise StudioError('无法读取图片大小', 400, 'image_size') from None
+                if not 0 < size <= MAX_UPLOAD_BYTES:
+                    raise StudioError('图片请控制在 10 MB 以内', 413, 'image_size')
+                self.connection.settimeout(30)
+                content = self.rfile.read(size)
+                if len(content) != size:
+                    raise StudioError('图片上传中断，请重新选择', 400, 'incomplete_upload')
+                content_type = self.headers.get('Content-Type', '').split(';')[0].strip().lower()
+                name = urllib.parse.unquote(self.headers.get('X-Prelude-File-Name', '我的参考图'))
+                return self.json_response(studio.upload_reference(self.owner, content, content_type, name), 201)
             if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                 raise StudioError('请使用 JSON 提交', 415, 'content_type')
             try:

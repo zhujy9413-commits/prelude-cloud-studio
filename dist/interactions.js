@@ -2,8 +2,12 @@
   'use strict';
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const waves=new WeakMap();
+  const pressed=new Set();
+  function release(){pressed.forEach(target=>target.classList.remove('is-pressing'));pressed.clear();}
   function press(target,event){
-    if(target.matches('.skip-link')||reduced.matches||target.disabled||target.getAttribute('aria-disabled')==='true')return;
+    if(target.matches('.skip-link')||target.disabled||target.getAttribute('aria-disabled')==='true')return;
+    target.classList.add('press-surface','is-pressing');pressed.add(target);
+    if(reduced.matches)return;
     const previous=waves.get(target);if(previous){clearTimeout(previous.timer);previous.wave.remove();}
     const rect=target.getBoundingClientRect(),wave=document.createElement('i');
     wave.className='press-wave';wave.setAttribute('aria-hidden','true');
@@ -22,4 +26,9 @@
     const target=event.target.closest('button,a[href]');
     if(target&&(event.key==='Enter'||target.tagName==='BUTTON'))press(target,event);
   });
+  document.addEventListener('pointerup',release,{passive:true});
+  document.addEventListener('pointercancel',release,{passive:true});
+  document.addEventListener('keyup',release);
+  window.addEventListener('blur',release);
+  window.addEventListener('pagehide',release);
 })();

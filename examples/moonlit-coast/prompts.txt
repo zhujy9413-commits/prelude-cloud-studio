@@ -1,0 +1,17 @@
+月光海岸 · 上传参考图实测
+
+首帧：first-frame.png
+图片使用内置 imagegen 工具生成
+
+图片提示词（实际使用）
+Use case: photorealistic-natural. Asset type: original first frame for a 5-second cinematic image-to-video test in the Prelude AI video studio. Create ONE beautiful photorealistic landscape image, 16:9 wide composition, ideally 1536 by 864 pixels. Scene: a quiet moonlit coastline just after blue hour. A slender off-white stone lighthouse stands on the headland in the right third, its lantern room glows warm amber without a sweeping beam. The left and center open onto a dark blue sea, two gentle bands of breaking surf clearly visible in the foreground, and a few graceful dune grasses along the lower edge. Low distant mauve clouds meet a deep indigo sky with a modest, realistic scattering of stars and a small soft crescent moon. The lighthouse architecture and horizon are clear, stable and detailed; enough nearby foam and grass texture for movement to be visibly animated later. Medium-wide 35mm cinematic photography, natural restrained colors, moonlit highlights, rich shadows with readable detail, a sense of quiet wonder. The composition should feel expensive and real, not a fantasy illustration. No people, no animals, no boats, no text, no watermark, no logo, no frame. This is a still photograph, not a UI or collage.
+
+动作描述（2026-10-26 通过首页实际提交）
+延续首帧的月光海岸、右侧灯塔和蓝紫色夜空，海浪自然向岸边涌来并缓缓退去，前景草叶随轻风小幅摆动，镜头极缓慢平稳向前推进，保持灯塔建筑、月亮、地平线的位置关系与原有光影，灯塔暖灯稳定发亮，星空保持安静，连续单镜头，不切换场景，不增加人物或物体
+
+实际参数
+wan2.6-i2v-flash · 720P · 5 秒 · 有声 · 单镜头
+作品名：月光海岸 · 上传首帧实测
+成片：1280×720，30fps，约 5.01 秒，含 AAC 音轨
+仅提交一条；浏览器完整播放、详情和下载验证通过
+标价估算 1.50 元；控制台对应免费额度由 32 秒降为 27 秒，未查询现金账单

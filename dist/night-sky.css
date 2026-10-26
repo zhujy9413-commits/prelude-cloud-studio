@@ -1,0 +1,42 @@
+/* The cloudscape fades into the same midnight color that begins the sky. */
+body:not([data-page="workspace"]){background:#090e20}
+body:not([data-page="workspace"]) .hero-shade{
+  background:linear-gradient(180deg,#03091e38,#03091e14 42%,#090e2126 64%,#0b1025 100%),radial-gradient(ellipse at 50% 32%,#060c2333,transparent 65%);
+}
+.inspiration-section{
+  position:relative;
+  isolation:isolate;
+  max-width:none;
+  padding:110px 6.5% 0;
+  background:linear-gradient(180deg,#0b1025,#0d1530 40%,#090e20 100%);
+}
+.inspiration-section:before{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 80% 65% at 50% 24%,#27346b35,transparent 78%),radial-gradient(ellipse 58% 35% at 75% 37%,#687ab30b,transparent 75%),radial-gradient(ellipse 65% 36% at 18% 12%,#a28cb90b,transparent 75%);
+  mask-image:linear-gradient(180deg,transparent,#000 220px);
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 220px);
+}
+.night-sky{
+  position:absolute;inset:0;z-index:0;width:100%;height:100%;pointer-events:none;
+  mask-image:linear-gradient(180deg,transparent,#000 110px,#000 88%,transparent);
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 110px,#000 88%,transparent);
+}
+.inspiration-section>.section-head,.inspiration-section>.inspiration-grid,.inspiration-section>.closing-line{position:relative;z-index:1;max-width:1350px;margin-left:auto;margin-right:auto}
+body .section-stamp{display:block;font-family:var(--font);font-style:normal;font-size:11px;font-weight:400;letter-spacing:.23em;text-transform:uppercase;color:#a5adc9}
+body .section-head h2{font-size:27px;line-height:1.7;letter-spacing:.025em;margin-top:14px;color:#eeebf3}
+body .section-head>p{color:#b8bdd1}
+body .section-head>p>span{color:#949eb9}
+body .inspiration-card>p{color:#b3b9ce}
+body .still-heading>span{color:#a4aec7}
+body .closing-line{border-color:#c7cdeb26}
+body .closing-line>p{font-size:30px;letter-spacing:.02em;line-height:1.6}
+body .closing-line em{color:#c6c9e1}
+body .site-footer{background:transparent}
+@media(max-width:950px){.inspiration-section{padding-top:90px}body .section-head h2{font-size:24px}}
+@media(max-width:760px){
+  .inspiration-section{padding:76px 7% 0}
+  body .section-head h2{font-size:23px}
+  body .section-head>p{margin-top:17px}
+  body .section-stamp{font-size:10px}
+  body .closing-line>p{font-size:26px}
+}

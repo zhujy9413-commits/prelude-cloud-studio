@@ -1,0 +1,60 @@
+/* Quiet typography and more sky around the act of creating. */
+:root{--header-height:64px;--editorial-cn:"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Microsoft YaHei",sans-serif}
+html{scroll-padding-top:calc(var(--header-height) + 16px)}
+body .site-header{height:var(--header-height);min-height:var(--header-height);padding:0 4.4%;gap:20px;background:linear-gradient(180deg,#0b1538dc,#0b1538b3);border-bottom-color:#c7c5e524}
+body .site-header .wordmark{font-size:18px;gap:11px;letter-spacing:1.5px}
+body .site-header .wordmark-cn{font-size:13px;letter-spacing:2px}
+body .site-header .wordmark-separator{font-size:17px}
+body .site-header .main-nav{gap:8px;margin-right:clamp(20px,3vw,50px);font:400 12px var(--font);letter-spacing:.025em}
+body .site-header .main-nav a{display:inline-flex;align-items:center;min-height:34px;padding:7px 12px;border-radius:6px;border-color:#c8c5e529;background:#c3c4e506}
+body .site-header .main-nav a.is-active{border-color:#d8c4ef59;background:#c7b4e91c}
+body .site-header .workspace-button{min-height:36px;padding:7px 13px;gap:13px;font:400 12px var(--font);background:#c7b1e512;border-color:#d1bee65e}
+body:not([data-page="workspace"]) .hero{min-height:100svh}
+body .hero-layout{padding:84px 32px 60px;gap:24px;max-width:1000px}
+body .hero-copy .hero-script{display:none}
+body .hero h1{font-family:var(--editorial-cn);font-weight:300;font-size:clamp(34px,3.15vw,48px);letter-spacing:.025em;line-height:1.5;color:#f4f1f6;text-shadow:0 2px 18px #06143166}
+body .hero h1>span{color:#eee9f3;font-weight:400}
+body .hero-description{font-family:var(--font);font-size:13px;font-weight:300;letter-spacing:.08em;line-height:1.85;color:#e8e0f0cc;margin:12px 0 0}
+body .creation-pass{max-width:660px;padding:21px 24px 18px;border-radius:16px;background:linear-gradient(135deg,#eef0ff09,#26213a0f);border-color:#e9e1fa40;box-shadow:0 12px 45px #060b221a,inset 0 1px 0 #ffffff0e}
+body .creation-pass .pass-top{display:none}
+body .creation-pass .pass-number{display:none}
+body .creation-pass .pass-divider{display:none}
+body .creation-pass .prompt-shell{padding:12px 14px 9px}
+body .creation-pass textarea{min-height:78px;max-height:180px;font-size:13px;line-height:1.95}
+body .creation-pass .prompt-meta{font-size:9px;margin-top:8px}
+body .creation-pass .prompt-suggestions{margin:12px 0 16px;gap:8px}
+body .creation-pass .prompt-suggestions button{min-height:30px;padding:5px 10px;font-size:11px}
+body .creation-pass .reference-panel{margin-bottom:12px;padding:8px;grid-template-columns:54px minmax(0,1fr) auto}
+body .creation-pass .reference-panel img{width:54px;height:38px}
+body .creation-pass .creation-controls{gap:18px}
+body .creation-pass .generation-settings label{font-size:10px;gap:6px}
+body .creation-pass .generation-settings select{height:43px}
+body .creation-pass .duration-advice{margin-top:9px}
+body .creation-pass .duration-advice button{min-height:26px;font-size:10px;padding:3px 8px}
+body .creation-pass .generate-button{min-height:43px;height:43px}
+body .creation-pass .prototype-note{font-size:9px;margin-top:12px;color:#e6d9ec99}
+body .hero-footer>span:first-child{display:none}
+body .hero-footer{bottom:16px}
+body .hero-footer>a{grid-column:2}
+body .hero-footer>button{grid-column:3}
+body .workspace-heading h1,body .composer-panel h2,body .waiting-copy h3,body #job-progress-title,body .section-head h2,body .closing-line>p,body #rename-title{font-family:var(--editorial-cn);font-weight:300;letter-spacing:.015em}
+body .workspace-heading h1{line-height:1.55}
+
+/* Fill, light and a short press make the control itself feel responsive. */
+body .prompt-shell,body .works-search{transition:background-color 180ms ease,border-color 180ms ease,box-shadow 180ms ease}
+body .prompt-shell:focus-within,body .works-search:focus-within{border-color:#e9ccffb0;background-color:#bba3e71c;box-shadow:0 0 0 3px #cbb0ee1a,inset 0 1px 12px #d7c5f00b}
+body .generation-settings select:focus,body .duration-field input:focus{border-color:#eed7ffb3;background-color:#bba3e72e;box-shadow:0 0 0 3px #cbb0ee1a}
+body .press-surface.is-pressing:not(:disabled){transform:translateY(1px) scale(.975)!important;background-color:#d9bff23d;border-color:#f0dcffbd;box-shadow:inset 0 2px 9px #05091b55!important;transition-duration:65ms}
+body .press-wave{background:radial-gradient(circle 115px at var(--press-x,50%) var(--press-y,50%),#f6e8ff82,#d9bdf532 36%,transparent 76%);animation-duration:420ms}
+@media(hover:hover){
+  body .prompt-shell:hover:not(:focus-within),body .works-search:hover:not(:focus-within){background-color:#b9a8df16;border-color:#ddc8f28a;box-shadow:inset 0 1px 12px #d8c8ec0a}
+  body .generation-settings select:enabled:hover,body .duration-field input:enabled:hover{background-color:#c2afe62b;border-color:#e8cdf9a8;box-shadow:0 3px 13px #060a221a,inset 0 1px 0 #ffffff12}
+  body :is(.prompt-suggestions button,.secondary-button,.use-prompt,.work-action,.works-toolbar button,.rename-trigger,.new-scene-button,#remove-reference):not(:disabled):hover{background-color:#cdb2ec40;border-color:#e8cef8bf;box-shadow:0 4px 15px #080d2638,inset 0 1px 0 #ffffff20;transform:translateY(-2px)}
+  body .site-header .main-nav a:hover{background:#cdb8ee30;border-color:#e2c9f48c;transform:translateY(-1px)}
+}
+@media(min-width:1700px){body .hero-layout{gap:30px;padding-top:125px;padding-bottom:110px}body .hero h1{font-size:52px}body .creation-pass{max-width:700px}}
+@media(max-width:950px){body .site-header{padding-left:4%;padding-right:4%;gap:16px}body .site-header .main-nav{gap:6px;margin-right:10px}body .site-header .main-nav a{padding:7px 9px;font-size:11px}body .hero-layout{padding-left:28px;padding-right:28px}body .hero h1{font-size:38px}}
+@media(max-width:760px){:root{--header-height:60px}body .site-header{padding:0 22px;gap:12px}body .site-header .wordmark{font-size:16px;gap:9px}body .site-header .workspace-button{font-size:11px;min-height:36px;padding:7px 11px}body .hero-layout{padding:100px 24px 100px;gap:25px}body .hero h1{font-size:clamp(31px,6.8vw,43px);line-height:1.65}body .hero-description{font-size:12px;letter-spacing:.08em;margin-top:10px}body .creation-pass{padding:22px 20px 19px}body .creation-pass .pass-divider{margin-left:-20px;margin-right:-20px}body .creation-pass textarea{min-height:100px;font-size:16px}body .creation-pass .reference-panel{grid-template-columns:54px minmax(0,1fr)}body .creation-pass #remove-reference{grid-column:2;justify-self:start}body .creation-pass .creation-controls{gap:17px}body .creation-pass .generate-button{height:46px;min-height:46px}body .creation-pass .prototype-note{font-size:10px}}
+@media(pointer:coarse){body .site-header .workspace-button{min-height:44px}body .generation-settings select,body .duration-field input{min-height:44px}}
+@media(max-width:760px){body .hero-footer{grid-template-columns:1fr auto}body .hero-footer>a{grid-column:1;justify-self:start}body .hero-footer>button{grid-column:2}}
+@media(prefers-reduced-motion:reduce){body .press-surface.is-pressing:not(:disabled){transform:none!important}body .prompt-shell,body .works-search{transition:none}}

@@ -4,8 +4,8 @@
 #scene-motion-toggle:hover{background:#ffffff0c;color:#f7f9fa}
 #scene-motion-toggle .icon{width:14px;height:14px}
 @media(hover:hover) and (pointer:fine){
-  body{cursor:url("assets/cursor-star.svg") 16 16,crosshair}
-  a,button:not(:disabled),select,summary,[role="button"]{cursor:url("assets/cursor-star-active.svg") 16 16,pointer}
+  body{cursor:auto}
+  a,button:not(:disabled),select,summary,[role="button"]{cursor:pointer}
   input,textarea,[contenteditable="true"]{cursor:text}
   button:disabled{cursor:wait}
 }

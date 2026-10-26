@@ -44,11 +44,14 @@
         if(complete&&video.getAttribute('src')!==item.video_url){video.src=item.video_url;video.load();}
         if(!complete&&video.hasAttribute('src')){video.pause();video.removeAttribute('src');video.load();}
         $('#detail-image').hidden=complete;
-        $('#detail-image').src=kind==='plan'?deps.planImage(item.preset):'assets/cloudscape.webp';
+        $('#detail-image').src=kind==='plan'?deps.planImage(item.preset):item.reference_image||'assets/cloudscape.webp';
         $('#detail-placeholder').hidden=complete||kind==='plan';
         $('#detail-placeholder-text').textContent=trashed?'让这一幕，回到你的作品集':deps.labels[item.status]||'你的镜头记录';
-        const parameters=[['生成方式',kind==='plan'?'参考静帧':item.reference_preset?'首帧生视频':'文生视频'],['创建时间',dateText(item)],['画面比例',item.aspect],['视频时长',`${item.duration} 秒${kind==='plan'?' · 方案参数':''}`],['清晰度',kind==='job'?item.resolution||'720P':'概念静帧'],['生成模型',kind==='job'?item.model||'wan2.6-t2v':'尚未生成视频']];
+        const parameters=[['生成方式',kind==='plan'?'参考静帧':item.reference_preset||item.reference_id?'首帧生视频':'文生视频'],['创建时间',dateText(item)],['画面比例',item.aspect],['视频时长',`${item.duration} 秒${kind==='plan'?' · 方案参数':''}`],['清晰度',kind==='job'?item.resolution||'720P':'概念静帧'],['生成模型',kind==='job'?item.model||'wan2.6-t2v':'尚未生成视频']];
         if(item.reference_preset)parameters.push(['参考首帧',({cloud:'暮色云海',city:'雨夜东京',lunar:'月面漫游'})[item.reference_preset]||'示例图']);
+        if(item.reference_id)parameters.push(['参考首帧',item.reference_name||'上传图片']);
+        const reference=$('#detail-reference');reference.hidden=!item.reference_image;
+        if(item.reference_image){reference.href=item.reference_image;reference.querySelector('img').src=item.reference_image;reference.querySelector('small').textContent=item.reference_name||'点击查看生成时的原图';}else reference.removeAttribute('href');
         if(kind==='job')parameters.push(['标价估算',`¥${item.estimated_cost_cny} · 非实扣账单`]);
         if(trashed)parameters.push(['删除时间',new Date(item.deleted_at*1000).toLocaleString('zh-CN',{hour12:false})]);
         const list=$('#detail-parameters');list.replaceChildren();
@@ -57,7 +60,7 @@
         $('#detail-message').textContent=trashed?'恢复后即可继续播放、下载和复用':item.error||'';
         $('#detail-download').hidden=!complete;
         if(complete)$('#detail-download').href=item.video_url+'?download=1';else $('#detail-download').removeAttribute('href');
-        $('#detail-reuse').hidden=trashed;$('#detail-progress').hidden=trashed||!active(entry);
+        $('#detail-reuse').hidden=trashed;$('#detail-reuse-label').textContent=kind==='job'?'继续调整':'按此画面生成';$('#detail-progress').hidden=trashed||!active(entry);
         $('#detail-restore').hidden=!trashed;$('#detail-favorite').hidden=trashed;$('#detail-trash').hidden=trashed;
         $('#detail-favorite').setAttribute('aria-pressed',String(Boolean(item.favorite)));
         $('#detail-favorite span').textContent=item.favorite?'已收藏':'收藏作品';
