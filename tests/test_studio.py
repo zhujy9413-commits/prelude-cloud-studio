@@ -5,6 +5,8 @@ import importlib.util
 import json
 import base64
 import io
+from functools import lru_cache
+import subprocess
 import sqlite3
 from pathlib import Path
 import tempfile
@@ -25,9 +27,11 @@ class FakeProvider:
         self.queries = 0
         self.submit_error = None
         self.query_error = None
+        self.job = {'duration': 5, 'aspect': '16:9'}
 
-    def submit(self, _):
+    def submit(self, job):
         self.submits += 1
+        self.job = job
         if self.submit_error:
             raise self.submit_error
         return {'output': {'task_id': 'task-123456789', 'task_status': 'PENDING'}}
@@ -39,7 +43,18 @@ class FakeProvider:
         return {'output': {'task_status': 'SUCCEEDED', 'video_url': 'https://fake.oss-cn-beijing.aliyuncs.com/result.mp4'}}
 
     def download(self, _, target):
-        target.write_bytes(b'\x00\x00\x00\x20ftyp' + bytes(120))
+        target.write_bytes(self.video(self.job['duration'], self.job['aspect']))
+
+    @staticmethod
+    @lru_cache(maxsize=20)
+    def video(duration=5, aspect='16:9'):
+        size = app.SIZES.get(aspect, '1280*720').replace('*', 'x')
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'fixture.mp4'
+            subprocess.run([app.encoder(), '-nostdin', '-v', 'error', '-f', 'lavfi', '-i',
+                f'color=c=navy:s={size}:r=12:d={duration}', '-c:v', 'libx264', '-preset', 'ultrafast',
+                '-pix_fmt', 'yuv420p', '-threads', '2', '-movflags', '+faststart', str(target)], check=True, timeout=30)
+            return target.read_bytes()
 
 
 class StudioChecks(unittest.TestCase):
@@ -71,6 +86,68 @@ class StudioChecks(unittest.TestCase):
         with self.assertRaises(app.StudioError):
             self.create(duration=10)
         self.assertEqual(self.provider.submits, 0)
+
+    def test_preparation_stages_and_observed_timing_are_persistent(self):
+        clock = [100.0]
+        download = self.provider.download
+        def save_result(url, target):
+            job = self.studio.get(first['id'])
+            self.assertEqual(job['status'], 'DOWNLOADING')
+            self.assertEqual(job['generation_completed_at'], 140)
+            self.assertIsNone(job['ready_at'])
+            clock[0] = 145
+            download(url, target)
+        def prepare(original, directory):
+            job = self.studio.get(first['id'])
+            self.assertEqual(job['status'], 'PREPARING')
+            self.assertEqual(job['download_completed_at'], 145)
+            self.assertIsNone(self.studio.public(job)['video_url'])
+            with self.assertRaises(app.StudioError):
+                self.create(request_id='preparing-second-request')
+            clock[0] = 149
+            return False  # Falling back to the original still becomes ready.
+        self.provider.download = save_result
+        with patch.object(app.time, 'time', side_effect=lambda: clock[0]), patch.object(app, 'prepare_media', side_effect=prepare):
+            first = self.create()
+            self.assertTrue(all(value is None for value in first['timings'].values()))
+            clock[0] = 110
+            self.studio.process(first['id'])
+            clock[0] = 140
+            self.studio.process(first['id'])
+        public = self.create()
+        self.assertEqual(public['status'], 'SUCCEEDED')
+        self.assertEqual(public['timings'], dict(zip(app.TIMING_FIELDS, (110, 140, 145, 149))))
+        self.studio.rename(first['id'], 'owner-a', '已完成')
+        self.assertEqual(self.create()['timings'], public['timings'])
+        self.assertEqual(self.provider.submits, 1)
+
+    def test_preparing_recovers_saved_result_without_provider_calls(self):
+        first = self.create()
+        (self.studio.media_dir / (first['id'] + '.mp4')).write_bytes(FakeProvider.video())
+        self.studio.update(first['id'], status='PREPARING', task_id='known-task-12345',
+                           submitted_at=10, generation_completed_at=20, download_completed_at=21)
+        recovered = app.Studio(self.studio.data_dir, provider=None)
+        with patch.object(app, 'prepare_media', return_value=False):
+            recovered.process(first['id'])
+        job = recovered.get(first['id'])
+        self.assertEqual(job['status'], 'SUCCEEDED')
+        self.assertEqual(job['download_completed_at'], 21)
+        self.assertIsNotNone(job['ready_at'])
+        self.assertEqual((self.provider.submits, self.provider.queries), (0, 0))
+
+    def test_download_retry_keeps_first_completion_observation(self):
+        first = self.create()
+        self.studio.process(first['id'])
+        with patch.object(app.time, 'time', return_value=200), patch.object(self.provider, 'download', side_effect=app.ProviderError('retry later')):
+            self.studio.process(first['id'])
+        self.assertEqual(self.studio.get(first['id'])['generation_completed_at'], 200)
+        self.studio.update(first['id'], next_check_at=0)
+        with patch.object(app.time, 'time', return_value=210), patch.object(app, 'prepare_media', return_value=False):
+            self.studio.process(first['id'])
+        job = self.studio.get(first['id'])
+        self.assertEqual(job['generation_completed_at'], 200)
+        self.assertEqual(job['ready_at'], 210)
+        self.assertEqual(self.provider.submits, 1)
 
     def test_concurrent_clicks_reserve_only_one_job(self):
         with ThreadPoolExecutor(max_workers=5) as pool:
@@ -192,6 +269,7 @@ class StudioChecks(unittest.TestCase):
         migrated = app.Studio(folder, self.provider).list_jobs('owner-a')[0]
         self.assertEqual(migrated['title'], 'original title'); self.assertEqual(migrated['duration'], 7)
         self.assertFalse(migrated['favorite']); self.assertIsNone(migrated['deleted_at'])
+        self.assertTrue(all(value is None for value in migrated['timings'].values()))
 
     def test_rename_is_persistent_owned_and_does_not_generate(self):
         first=self.create()
@@ -229,6 +307,7 @@ class StudioChecks(unittest.TestCase):
         self.provider.query_error = app.ProviderError('temporary error')
         self.studio.process(first['id'])
         self.provider.query_error = None
+        self.studio.update(first['id'], next_check_at=0)
         self.studio.process(first['id'])
         self.assertEqual(self.provider.submits, 1)
         self.assertEqual(self.studio.get(first['id'])['status'], 'SUCCEEDED')

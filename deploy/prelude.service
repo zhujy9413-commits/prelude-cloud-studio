@@ -1,0 +1,31 @@
+[Unit]
+Description=Prelude invitation beta
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=prelude
+Group=prelude
+WorkingDirectory=/opt/prelude
+EnvironmentFile=/etc/prelude/studio.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/prelude/.venv/bin/gunicorn -c /opt/prelude/deploy/gunicorn.conf.py production:create_app()
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=120
+UMask=0077
+StateDirectory=prelude
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/prelude
+
+[Install]
+WantedBy=multi-user.target

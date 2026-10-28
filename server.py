@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Local Prelude studio: same-origin UI, persistent jobs, server-side Bailian calls."""
 import argparse
-import base64
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
 import fcntl
 import io
 from http import cookies
+from http.client import HTTPException
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import mimetypes
@@ -26,6 +26,11 @@ import urllib.parse
 import urllib.request
 import uuid
 import warnings
+from access import Access, AccessError
+from task_recovery import job_lock, schema as recovery_schema
+from generation_spec import (MODEL, IMAGE_MODEL, SIZES, API_PATH, encoded as request_bytes,
+                             digest as request_digest, snapshot as generation_snapshot,
+                             payload as generation_payload, frozen_payload, public_record)
 
 try:
     from PIL import Image, ImageOps, UnidentifiedImageError
@@ -36,15 +41,13 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'video-production'))
 from generate_cloudscape import config, JobError, NoRedirect
 
-MODEL = 'wan2.6-t2v'
-IMAGE_MODEL = 'wan2.6-i2v-flash'
 REFERENCES = {'cloud': 'cloudscape.webp', 'city': 'city.webp', 'lunar': 'lunar.webp'}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_PIXELS = 24_000_000
 UPLOAD_TYPES = {'image/jpeg': 'JPEG', 'image/png': 'PNG', 'image/webp': 'WEBP'}
-SIZES = {'16:9': '1280*720', '9:16': '720*1280', '1:1': '960*960'}
-ACTIVE = ('SUBMITTING', 'PENDING', 'RUNNING', 'DOWNLOADING', 'UNCERTAIN')
+ACTIVE = ('SUBMITTING', 'PENDING', 'RUNNING', 'DOWNLOADING', 'PREPARING', 'UNCERTAIN')
 TERMINAL = ('SUCCEEDED', 'FAILED', 'REJECTED', 'UNCERTAIN', 'UNAVAILABLE')
+TIMING_FIELDS = ('submitted_at', 'generation_completed_at', 'download_completed_at', 'ready_at')
 
 
 class StudioError(Exception):
@@ -80,7 +83,7 @@ class Bailian:
         headers = {'Authorization': 'Bearer ' + self.key, 'Accept': 'application/json'}
         data = None
         if payload is not None:
-            data = json.dumps(payload, ensure_ascii=False).encode()
+            data = request_bytes(payload)
             headers.update({'Content-Type': 'application/json', 'X-DashScope-Async': 'enable'})
         request = urllib.request.Request('https://' + self.host + path, data=data, headers=headers)
         try:
@@ -96,26 +99,18 @@ class Bailian:
             except (ValueError, OSError):
                 code = ''
             raise ProviderError(provider_message(code), rejected=error.code in (400, 401, 403, 404, 422, 429)) from None
-        except (urllib.error.URLError, TimeoutError, ValueError, OSError, JobError):
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError, HTTPException, JobError):
             raise ProviderError('服务连接暂时中断，正在核对原任务，请勿重复提交') from None
 
     def submit(self, job):
         reference = job.get('reference_preset')
-        if reference or job.get('reference_id'):
-            # Uploaded bytes are supplied by the worker, never by a client path or URL.
-            image_bytes = job['_reference_bytes'] if job.get('reference_id') else (ROOT / 'dist/assets' / REFERENCES[reference]).read_bytes()
-            mime = 'image/jpeg' if job.get('reference_id') else 'image/webp'
-            return self.request('/api/v1/services/aigc/video-generation/video-synthesis', {
-                'model': IMAGE_MODEL,
-                'input': {'prompt': job['prompt'], 'img_url': 'data:' + mime + ';base64,' + base64.b64encode(image_bytes).decode()},
-                'parameters': {'resolution': '720P', 'duration': job['duration'], 'audio': True,
-                               'prompt_extend': True, 'shot_type': 'single', 'watermark': False},
-            })
-        return self.request('/api/v1/services/aigc/video-generation/video-synthesis', {
-            'model': MODEL, 'input': {'prompt': job['prompt']},
-            'parameters': {'size': SIZES[job['aspect']], 'duration': job['duration'],
-                           'prompt_extend': True, 'shot_type': 'single', 'watermark': False},
-        })
+        try:
+            image_bytes = (job.get('_reference_bytes') or
+                           ((ROOT / 'dist/assets' / REFERENCES[reference]).read_bytes() if reference else None))
+            body = frozen_payload(job, image_bytes)
+        except (OSError, ValueError, KeyError, TypeError):
+            raise ProviderError('生成记录或参考图不匹配，本次尚未提交，请联系邀请人核对', rejected=True) from None
+        return self.request(API_PATH, body)
 
     def query(self, task_id):
         return self.request('/api/v1/tasks/' + task_id)
@@ -131,6 +126,9 @@ class Bailian:
             total = 0
             # No authorization header is sent to the result host. No redirects followed.
             with os.fdopen(fd, 'wb') as handle, urllib.request.build_opener(NoRedirect()).open(url, timeout=60) as response:
+                declared = response.headers.get('Content-Length')
+                if declared is not None and (not declared.isdigit() or not 32 <= int(declared) <= 100 * 1024 * 1024):
+                    raise ProviderError('视频文件长度异常，原任务已保留供核对')
                 while True:
                     chunk = response.read(1024 * 1024)
                     if not chunk:
@@ -139,30 +137,37 @@ class Bailian:
                     if total > 100 * 1024 * 1024:
                         raise ProviderError('视频文件超过本地保存上限，原任务已保留')
                     handle.write(chunk)
-            with open(temp, 'rb') as handle:
-                header = handle.read(32)
-            if total < 32 or header[4:8] != b'ftyp':
-                raise ProviderError('视频文件暂不可用，正在重新获取原结果')
+            if declared is not None and total != int(declared):
+                raise ProviderError('视频下载尚未完整，正在重新获取原结果')
+            validate_container(temp)
             os.replace(temp, destination)
-        except (urllib.error.URLError, OSError, JobError):
+        except (urllib.error.URLError, OSError, HTTPException, JobError, MediaValidationError):
             raise ProviderError('视频已生成，正在重新获取原结果') from None
         finally:
             if os.path.exists(temp):
                 os.unlink(temp)
 
 
+from media import prepare_media, prepare_stream, stream_type, validate_media, validate_container, MediaValidationError, encoder
+
+
 class Studio:
-    def __init__(self, data_dir, provider=None, daily_limit_cents=3000, poll_seconds=15):
+    def __init__(self, data_dir, provider=None, daily_limit_cents=3000, poll_seconds=15, invite_only=False):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.media_dir = self.data_dir / 'videos'
         self.media_dir.mkdir(exist_ok=True, mode=0o700)
+        self.playback_dir = self.data_dir / 'playback'
+        self.playback_dir.mkdir(exist_ok=True, mode=0o700)
+        self.stream_dir = self.data_dir / 'streams'
+        self.stream_dir.mkdir(exist_ok=True, mode=0o700)
         self.reference_dir = self.data_dir / 'references'
         self.reference_dir.mkdir(exist_ok=True, mode=0o700)
         self.db_path = self.data_dir / 'studio.sqlite3'
         self.provider = provider
         self.daily_limit = daily_limit_cents
         self.poll_seconds = poll_seconds
+        self.invite_only = invite_only
         self.stop = threading.Event()
         self.wake = threading.Event()
         with self.db() as db:
@@ -186,6 +191,23 @@ class Studio:
                 db.execute('ALTER TABLE jobs ADD COLUMN reference_preset TEXT')
             if 'reference_id' not in columns:
                 db.execute('ALTER TABLE jobs ADD COLUMN reference_id TEXT')
+            for field in TIMING_FIELDS:
+                if field not in columns:
+                    db.execute(f'ALTER TABLE jobs ADD COLUMN {field} REAL')
+            for field, declaration in (('recovery_attempts', 'INTEGER NOT NULL DEFAULT 0'), ('next_check_at', 'REAL'), ('last_checked_at', 'REAL')):
+                if field not in columns:
+                    db.execute(f'ALTER TABLE jobs ADD COLUMN {field} {declaration}')
+            for field, declaration in (('request_spec', 'TEXT'), ('request_fingerprint', 'TEXT'),
+                                       ('request_recorded_at', 'REAL'), ('request_started_at', 'REAL')):
+                if field not in columns:
+                    db.execute(f'ALTER TABLE jobs ADD COLUMN {field} {declaration}')
+            db.execute('''CREATE TRIGGER IF NOT EXISTS frozen_generation_record
+                BEFORE UPDATE OF request_spec,request_fingerprint,request_recorded_at ON jobs
+                WHEN OLD.request_spec IS NOT NULL AND
+                  (NEW.request_spec IS NOT OLD.request_spec OR NEW.request_fingerprint IS NOT OLD.request_fingerprint
+                   OR NEW.request_recorded_at IS NOT OLD.request_recorded_at)
+                BEGIN SELECT RAISE(ABORT,'generation record is immutable'); END''')
+            recovery_schema(db)
             db.execute('''CREATE TABLE IF NOT EXISTS reference_images (
                 id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL,
                 width INTEGER NOT NULL, height INTEGER NOT NULL, aspect TEXT NOT NULL,
@@ -194,6 +216,7 @@ class Studio:
             db.execute("UPDATE jobs SET status='UNCERTAIN', error=? WHERE status='SUBMITTING' AND task_id IS NULL",
                        ('提交时服务重启，结果需要人工核对；不会自动重新提交',))
         os.chmod(self.db_path, 0o600)
+        self.access = Access(self.db_path)
 
     @contextmanager
     def db(self):
@@ -222,6 +245,12 @@ class Studio:
 
     def public(self, job):
         uploaded = self.get_reference(job['reference_id'], job['owner']) if job.get('reference_id') else None
+        available = job['status'] == 'SUCCEEDED' and job['deleted_at'] is None
+        original = self.media_dir / (job['id'] + '.mp4')
+        playback = self.playback_dir / original.name
+        stream = self.stream_dir / original.name
+        poster = self.playback_dir / (job['id'] + '.jpg')
+        base = '/api/generations/' + job['id']
         return {**{key: job[key] for key in ('id', 'request_id', 'title', 'prompt', 'aspect', 'duration', 'status', 'created_at', 'error')},
                 'favorite': bool(job['favorite']), 'deleted_at': job['deleted_at'],
                 'model': job['model'], 'reference_preset': job['reference_preset'],
@@ -229,7 +258,22 @@ class Studio:
                 'reference_name': uploaded['name'] if uploaded else None,
                 'reference_image': uploaded['image_url'] if uploaded else '/assets/' + REFERENCES[job['reference_preset']] if job['reference_preset'] in REFERENCES else None,
                 'resolution': '720P', 'estimated_cost_cny': f"{job['cost_cents']/100:.2f}",
-                'video_url': '/api/generations/' + job['id'] + '/video' if job['status'] == 'SUCCEEDED' and job['deleted_at'] is None else None}
+                # Local observations, not the provider's exact generation timestamps.
+                # Historical jobs stay null rather than guessing from updated_at.
+                'timings': {field: job.get(field) for field in TIMING_FIELDS},
+                'generation_record': public_record(job),
+                'recovery': {'can_check': job['status'] == 'UNCERTAIN' and bool(job.get('task_id')),
+                             'needs_operator': job['status'] == 'UNCERTAIN' and (not job.get('task_id') or job.get('next_check_at') is None),
+                             'last_checked_at': job.get('last_checked_at')},
+                'video_url': base + '/video' if available else None,
+                'playback_url': base + ('/preview' if playback.is_file() else '/video') if available else None,
+                'poster_url': base + '/poster' if available and poster.is_file() else None,
+                'playback_optimized': available and playback.is_file(),
+                'stream_url': base + '/stream' if available and stream.is_file() else None,
+                'stream_type': stream_type(str(stream), stream.stat().st_mtime_ns) if available and stream.is_file() else None,
+                'stream_size_bytes': stream.stat().st_size if available and stream.is_file() else None,
+                'original_size_bytes': original.stat().st_size if available and original.is_file() else None,
+                'playback_size_bytes': playback.stat().st_size if available and playback.is_file() else None}
 
     def get_reference(self, reference_id, owner):
         if not isinstance(reference_id, str) or not re.fullmatch(r'[a-f0-9-]{36}', reference_id):
@@ -306,6 +350,7 @@ class Studio:
         request_id = payload.get('request_id', '')
         if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 1200:
             raise StudioError('请输入 1 到 1200 字的画面描述')
+        original_prompt = prompt
         prompt = prompt.strip()
         if not isinstance(aspect, str) or (not reference_id and aspect not in SIZES) or type(duration) is not int or not 2 <= duration <= 15:
             raise StudioError('请选择支持的画幅，并填写 2 到 15 之间的整数秒数')
@@ -331,9 +376,15 @@ class Studio:
                 if (old['prompt'], old['aspect'], old['duration'], old['reference_preset'], old['reference_id']) != (prompt, aspect, duration, reference, reference_id):
                     raise StudioError('此请求已提交，请先核对原任务', 409, 'request_conflict')
                 return self.public(dict(old))
+            if self.invite_only or owner.startswith('account-'):
+                quota = self.access.quota(owner, db)
+                if duration > quota['remaining_seconds']:
+                    raise StudioError(f"内测还剩 {quota['remaining_seconds']} 秒，请缩短时长或联系邀请人", 429, 'personal_limit')
             if self.provider is None:
                 raise StudioError('服务端尚未配置百炼密钥', 503, 'not_configured')
-            if db.execute('SELECT 1 FROM jobs WHERE status IN (?,?,?,?,?) LIMIT 1', ACTIVE).fetchone():
+            if not encoder():
+                raise StudioError('成片校验服务尚未准备好，请联系邀请人', 503, 'media_not_ready')
+            if db.execute('SELECT 1 FROM jobs WHERE status IN (' + ','.join('?' for _ in ACTIVE) + ') LIMIT 1', ACTIVE).fetchone():
                 raise StudioError('已有视频正在生成或待核对，请等待原任务完成', 409, 'busy')
             china = timezone(timedelta(hours=8))
             day_start = datetime.now(china).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
@@ -342,8 +393,19 @@ class Studio:
             if spent + cost > self.daily_limit:
                 raise StudioError('今天的本地生成预算已达到上限，请明天继续', 429, 'daily_limit')
             now, job_id = time.time(), str(uuid.uuid4())
+            try:
+                reference_bytes = ((self.reference_dir / (reference_id + '.jpg')).read_bytes() if reference_id else
+                                   (ROOT / 'dist/assets' / REFERENCES[reference]).read_bytes() if reference else None)
+                spec = generation_snapshot({'prompt': prompt, 'aspect': aspect, 'duration': duration,
+                                            'reference_id': reference_id, 'reference_preset': reference},
+                                           original_prompt, reference_bytes)
+                fingerprint = request_digest(request_bytes(generation_payload(spec, reference_bytes)))
+            except (OSError, ValueError, KeyError):
+                raise StudioError('参考图或生成设置暂不可读取，本次尚未提交', 503, 'record_unavailable') from None
             db.execute('''INSERT INTO jobs(id,owner,request_id,prompt,aspect,duration,cost_cents,created_at,updated_at,status,model,reference_preset,reference_id)
                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''', (job_id, owner, request_id, prompt, aspect, duration, cost, now, now, 'SUBMITTING', IMAGE_MODEL if reference or reference_id else MODEL, reference, reference_id))
+            db.execute('UPDATE jobs SET request_spec=?,request_fingerprint=?,request_recorded_at=? WHERE id=?',
+                       (request_bytes(spec).decode(), fingerprint, now, job_id))
         self.wake.set()
         return self.public(self.get(job_id))
 
@@ -384,17 +446,58 @@ class Studio:
                 raise StudioError('不支持的作品操作')
         return self.public(self.get(job_id, owner))
 
-    def process(self, job_id):
+    def check_task(self, job_id, owner):
+        try:
+            with job_lock(self.data_dir, job_id):
+                job = self.get(job_id, owner)
+                if job['status'] == 'UNCERTAIN':
+                    if not job['task_id']:
+                        raise StudioError('请将作品编号交给邀请人，在百炼控制台核对原任务；不会重复生成', 409, 'operator_required')
+                    if job.get('last_checked_at') and time.time() - job['last_checked_at'] < self.poll_seconds:
+                        raise StudioError('刚刚查询过原任务，请稍等片刻再查', 429, 'check_cooldown')
+                    self.update(job_id, next_check_at=0, error='正在重新查询原任务，不会重新生成')
+                self.wake.set()
+                return self.public(self.get(job_id, owner))
+        except BlockingIOError:
+            raise StudioError('正在查询原任务，请稍等片刻', 409, 'checking') from None
+
+    def recovery_needed(self, job_id, message):
         job = self.get(job_id)
+        attempts = job['recovery_attempts'] + 1
+        retry = bool(job['task_id']) and attempts < 3
+        self.update(job_id, status='UNCERTAIN', error=message if retry else '原任务结果需要邀请人核对，记录已保留；不会重新生成', recovery_attempts=attempts,
+                    next_check_at=time.time() + self.poll_seconds if retry else None)
+
+    def process(self, job_id):
+        try:
+            with job_lock(self.data_dir, job_id):
+                self._process(job_id)
+        except BlockingIOError:
+            return  # Another local worker/operator is already handling this exact task.
+
+    def _process(self, job_id):
+        job = self.get(job_id)
+        if job['status'] == 'UNCERTAIN' and (not job['task_id'] or job['next_check_at'] is None or job['next_check_at'] > time.time()):
+            return
+        original = self.media_dir / (job_id + '.mp4')
+        if job['status'] in ('DOWNLOADING', 'PREPARING') and original.is_file():
+            self.finish_media(job, original)
+            return
         if not self.provider:
             return
         if job['status'] == 'SUBMITTING':
             try:
-                if job.get('reference_id'):
-                    try:
+                try:
+                    if job.get('reference_id'):
                         job['_reference_bytes'] = (self.reference_dir / (job['reference_id'] + '.jpg')).read_bytes()
-                    except OSError:
-                        raise ProviderError('参考图暂不可读取，请重新上传；本次尚未提交生成', rejected=True) from None
+                    elif job.get('reference_preset'):
+                        job['_reference_bytes'] = (ROOT / 'dist/assets' / REFERENCES[job['reference_preset']]).read_bytes()
+                    if not job.get('request_spec'):
+                        raise ValueError('Missing frozen request')
+                    frozen_payload(job, job.get('_reference_bytes'))
+                except (OSError, ValueError, KeyError, TypeError):
+                    raise ProviderError('生成记录或参考图不匹配，本次尚未提交，请联系邀请人核对', rejected=True) from None
+                self.update(job_id, request_started_at=time.time())
                 body = self.provider.submit(job)
                 output = body.get('output', {})
                 task_id = output.get('task_id')
@@ -402,36 +505,63 @@ class Studio:
                     if body.get('code'):
                         raise ProviderError(provider_message(body['code']), rejected=True)
                     raise ProviderError('未取得任务编号，需要人工核对，请勿重复提交')
-                self.update(job_id, status='PENDING', task_id=task_id, error='')
+                self.update(job_id, status='PENDING', task_id=task_id, error='', submitted_at=time.time())
             except ProviderError as error:
                 self.update(job_id, status='REJECTED' if error.rejected else 'UNCERTAIN', error=str(error))
             return
-        if not job['task_id'] or job['status'] in TERMINAL:
+        if not job['task_id'] or (job['status'] in TERMINAL and job['status'] != 'UNCERTAIN'):
             return
+        self.update(job_id, last_checked_at=time.time())
         try:
             body = self.provider.query(job['task_id'])
             output = body.get('output', {})
             state = output.get('task_status')
             if state in ('PENDING', 'RUNNING'):
-                self.update(job_id, status=state, error='')
+                self.update(job_id, status=state, error='', recovery_attempts=0, next_check_at=None)
             elif state == 'SUCCEEDED':
-                self.update(job_id, status='DOWNLOADING', error='')
-                self.provider.download(output.get('video_url', ''), self.media_dir / (job_id + '.mp4'))
-                self.update(job_id, status='SUCCEEDED', error='')
+                self.update(job_id, status='DOWNLOADING', error='',
+                            generation_completed_at=job.get('generation_completed_at') or time.time())
+                self.provider.download(output.get('video_url', ''), original)
+                self.update(job_id, status='PREPARING', download_completed_at=time.time())
+                self.finish_media(self.get(job_id), original)
             elif state in ('FAILED', 'CANCELED'):
-                self.update(job_id, status='FAILED', error=provider_message(output.get('code', '')))
+                self.update(job_id, status='FAILED', error=provider_message(output.get('code', '')), next_check_at=None)
             elif state == 'UNKNOWN':
-                self.update(job_id, status='UNCERTAIN', error='原任务状态暂不可确认，需要核对；不会自动重新生成')
+                self.recovery_needed(job_id, '原任务状态暂不可确认，已保留记录供核对；不会自动重新生成')
             else:
                 raise ProviderError('正在重新查询原任务，请勿重复提交')
         except ProviderError as error:
-            self.update(job_id, error=str(error))
+            self.recovery_needed(job_id, str(error))
+
+    def finish_media(self, job, original):
+        self.update(job['id'], status='PREPARING', error='',
+                    download_completed_at=job.get('download_completed_at') or time.time())
+        try:
+            size = tuple(map(int, SIZES[job['aspect']].split('*'))) if job['model'] == MODEL else None
+            validate_media(original, job['duration'], size)
+        except (MediaValidationError, OSError):
+            # Retain the downloaded bytes privately for diagnosis, never expose a bad film.
+            quarantine = self.data_dir / 'quarantine'
+            quarantine.mkdir(exist_ok=True, mode=0o700)
+            if original.is_file():
+                os.replace(original, quarantine / (job['id'] + '.mp4'))
+            self.recovery_needed(job['id'], '成片校验暂未通过，正在核对原结果；不会重新生成')
+            return
+        try:
+            prepare_media(original, self.playback_dir)
+        except OSError:
+            pass  # The saved original remains playable; never re-submit the model task.
+        try:
+            prepare_stream(self.playback_dir / original.name if (self.playback_dir / original.name).is_file() else original, self.stream_dir)
+        except OSError:
+            pass  # Incremental delivery is optional; the validated original is retained.
+        self.update(job['id'], status='SUCCEEDED', error='', ready_at=time.time(), next_check_at=None, recovery_attempts=0)
 
     def run_worker(self):
         while not self.stop.is_set():
             self.wake.clear()
             with self.db() as db:
-                rows = db.execute("SELECT id FROM jobs WHERE status IN ('SUBMITTING','PENDING','RUNNING','DOWNLOADING')").fetchall()
+                rows = db.execute("SELECT id FROM jobs WHERE status IN ('SUBMITTING','PENDING','RUNNING','DOWNLOADING','PREPARING') OR (status='UNCERTAIN' AND task_id IS NOT NULL AND next_check_at<=?)", (time.time(),)).fetchall()
             for row in rows:
                 if self.stop.is_set():
                     break
@@ -444,21 +574,27 @@ class Studio:
             self.wake.wait(self.poll_seconds)
 
 
-class Handler(BaseHTTPRequestHandler):
-    server_version = 'Prelude'
+class StudioRequest:
+    """Shared routes for the loopback development server and production WSGI."""
+    session_cookie = 'prelude_session'
+    secure_session = False
+
+    def expected_origin(self):
+        host = self.headers.get('Host', '')
+        allowed = {'127.0.0.1:' + str(self.server.server_port), 'localhost:' + str(self.server.server_port)}
+        if host not in allowed:
+            raise StudioError('无效的访问地址', 403, 'host_forbidden')
+        return 'http://' + host
 
     def log_message(self, *_):
         pass  # No prompts, cookies, signed URLs, credentials, or request bodies in logs.
 
     def guard(self, mutation=False):
-        host = self.headers.get('Host', '')
-        allowed = {'127.0.0.1:' + str(self.server.server_port), 'localhost:' + str(self.server.server_port)}
-        if host not in allowed:
-            raise StudioError('无效的访问地址', 403, 'host_forbidden')
+        expected = self.expected_origin()
         origin = self.headers.get('Origin')
-        if origin and origin != 'http://' + host:
-            raise StudioError('请从本机工作室页面访问', 403, 'origin_forbidden')
-        if mutation and origin != 'http://' + host:
+        if origin and origin != expected:
+            raise StudioError('请从工作室页面访问', 403, 'origin_forbidden')
+        if mutation and origin != expected:
             raise StudioError('请从工作室页面提交', 403, 'origin_required')
         public_navigation = (self.command in ('GET', 'HEAD') and
                              self.headers.get('Sec-Fetch-Mode') == 'navigate' and
@@ -473,21 +609,34 @@ class Handler(BaseHTTPRequestHandler):
             jar.load(self.headers.get('Cookie', ''))
         except cookies.CookieError:
             pass
-        token = jar.get('prelude_session')
+        token = jar.get(self.session_cookie)
         token = token.value if token else ''
         self.new_cookie = None
         if not re.fullmatch(r'[A-Za-z0-9_-]{43}', token):
             token = secrets.token_urlsafe(32)
-            self.new_cookie = 'prelude_session=' + token + '; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000'
-        self.owner = hashlib.sha256(token.encode()).hexdigest()
+            self.rotate_session(token)
+        self.token_hash = hashlib.sha256(token.encode()).hexdigest()
+        self.account = self.server.studio.access.account_for(self.token_hash)
+        self.owner = self.account['id'] if self.account else self.token_hash
         self.csrf = hashlib.sha256((token + ':csrf').encode()).hexdigest()
 
-    def common_headers(self):
+    def rotate_session(self, token):
+        self.new_cookie = self.session_cookie + '=' + token + '; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000'
+        if self.secure_session:
+            self.new_cookie += '; Secure'
+
+    def access_state(self):
+        return {'invite_only': self.server.studio.invite_only, 'signed_in': self.account is not None,
+                'account_id': self.account['id'] if self.account else None,
+                'quota': self.server.studio.access.quota(self.account['id']) if self.account else None}
+
+    def common_headers(self, cache_control='no-store', set_cookie=True):
         self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Frame-Options', 'DENY')
         self.send_header('Referrer-Policy', 'no-referrer')
         self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
-        self.send_header('Cache-Control', 'no-store')
-        if getattr(self, 'new_cookie', None):
+        self.send_header('Cache-Control', cache_control)
+        if set_cookie and getattr(self, 'new_cookie', None):
             self.send_header('Set-Cookie', self.new_cookie)
 
     def json_response(self, data, status=200):
@@ -500,10 +649,21 @@ class Handler(BaseHTTPRequestHandler):
         if self.command != 'HEAD':
             self.wfile.write(body)
 
-    def file_response(self, path, download=False):
-        size = path.stat().st_size
+    def file_response(self, path, download=False, cache_control='private, no-cache', download_name=None):
+        stat = path.stat()
+        size = stat.st_size
+        etag = f'"{stat.st_mtime_ns:x}-{size:x}"'
+        public = cache_control.startswith('public')
+        if self.headers.get('If-None-Match') == etag:
+            self.send_response(304)
+            self.common_headers(cache_control, set_cookie=not public)
+            self.send_header('ETag', etag)
+            self.end_headers()
+            return
         start, end, partial = 0, size - 1, False
         range_header = self.headers.get('Range')
+        if self.headers.get('If-Range') and self.headers['If-Range'] != etag:
+            range_header = None
         if range_header:
             match = re.fullmatch(r'bytes=(\d*)-(\d*)', range_header)
             if not match or not any(match.groups()):
@@ -517,30 +677,24 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(416)
                 self.common_headers()
                 self.send_header('Content-Range', 'bytes */' + str(size))
+                self.send_header('Content-Type', 'application/octet-stream')
                 self.send_header('Content-Length', '0')
                 self.end_headers()
                 return
             partial = True
         self.send_response(206 if partial else 200)
-        self.common_headers()
+        self.common_headers(cache_control, set_cookie=not public)
+        self.send_header('ETag', etag)
         self.send_header('Content-Type', mimetypes.guess_type(path.name)[0] or 'application/octet-stream')
         self.send_header('Content-Length', str(end - start + 1))
         self.send_header('Accept-Ranges', 'bytes')
         if partial:
             self.send_header('Content-Range', f'bytes {start}-{end}/{size}')
         if download:
-            self.send_header('Content-Disposition', 'attachment; filename="prelude-' + path.name + '"')
+            self.send_header('Content-Disposition', 'attachment; filename="' + (download_name or 'prelude-' + path.name) + '"')
         self.end_headers()
         if self.command != 'HEAD':
-            with path.open('rb') as handle:
-                handle.seek(start)
-                remaining = end - start + 1
-                while remaining:
-                    block = handle.read(min(256 * 1024, remaining))
-                    if not block:
-                        break
-                    self.wfile.write(block)
-                    remaining -= len(block)
+            self.stream_file(path, start, end - start + 1)
 
     def dispatch(self):
         self.guard(self.command == 'POST')
@@ -550,9 +704,10 @@ class Handler(BaseHTTPRequestHandler):
         studio = self.server.studio
         if self.command in ('GET', 'HEAD'):
             if path == '/api/bootstrap':
-                return self.json_response({'csrf': self.csrf, 'ready': studio.provider is not None, 'model': MODEL,
+                return self.json_response({'csrf': self.csrf, 'ready': studio.provider is not None and bool(encoder()), 'model': MODEL,
                     'reference_supported': True, 'upload_supported': True, 'upload_max_bytes': MAX_UPLOAD_BYTES, 'reference_model': IMAGE_MODEL,
                     'price_per_second_cny': '0.60', 'daily_limit_cny': f'{studio.daily_limit/100:.2f}', 'poll_seconds': studio.poll_seconds,
+                    'access': self.access_state(),
                     'jobs': studio.list_jobs(self.owner), 'deleted_jobs': studio.list_jobs(self.owner, deleted=True)})
             if path == '/api/generations':
                 return self.json_response({'jobs': studio.list_jobs(self.owner, deleted=urllib.parse.parse_qs(parsed.query).get('deleted') == ['1'])})
@@ -565,15 +720,17 @@ class Handler(BaseHTTPRequestHandler):
                         raise StudioError('参考图暂不可读取，请重新上传', 404, 'reference_not_found')
                     return self.file_response(image)
                 return self.json_response(reference)
-            match = re.fullmatch(r'/api/generations/([a-f0-9-]{36})(/video)?', path)
+            match = re.fullmatch(r'/api/generations/([a-f0-9-]{36})(/(?:video|preview|poster|stream))?', path)
             if match:
                 job = studio.get(match[1], self.owner)
                 if not match[2]:
                     return self.json_response(studio.public(job))
-                media = studio.media_dir / (job['id'] + '.mp4')
+                suffix = match[2]
+                media = (studio.media_dir if suffix == '/video' else studio.stream_dir if suffix == '/stream' else studio.playback_dir) / (job['id'] + ('.jpg' if suffix == '/poster' else '.mp4'))
                 if job['deleted_at'] is not None or job['status'] != 'SUCCEEDED' or not media.is_file():
                     raise StudioError('视频还没有准备好', 404, 'not_ready')
-                return self.file_response(media, download='download' in urllib.parse.parse_qs(parsed.query))
+                return self.file_response(media, download='download' in urllib.parse.parse_qs(parsed.query),
+                    download_name=('prelude-flow-' if suffix == '/preview' else 'prelude-original-') + job['id'] + '.mp4' if suffix in ('/preview','/video') else None)
             if path.startswith('/api/'):
                 raise StudioError('接口不存在', 404, 'not_found')
             if path == '/':
@@ -582,12 +739,16 @@ class Handler(BaseHTTPRequestHandler):
             public_root = (ROOT / 'dist').resolve()
             if public_root not in target.parents or any(part.startswith('.') for part in Path(path).parts) or not target.is_file():
                 raise StudioError('页面不存在', 404, 'not_found')
-            return self.file_response(target)
+            return self.file_response(target, cache_control='public, max-age=86400' if path.startswith('/assets/') else 'no-store')
         rename_match = re.fullmatch(r'/api/generations/([a-f0-9-]{36})/rename', path)
         manage_match = re.fullmatch(r'/api/generations/([a-f0-9-]{36})/(favorite|trash|restore)', path)
-        if self.command == 'POST' and (path in ('/api/generations', '/api/references') or rename_match or manage_match):
+        check_match = re.fullmatch(r'/api/generations/([a-f0-9-]{36})/check', path)
+        auth_action = path.removeprefix('/api/access/') if path in ('/api/access/activate', '/api/access/login', '/api/access/logout') else None
+        if self.command == 'POST' and (path in ('/api/generations', '/api/references') or rename_match or manage_match or check_match or auth_action):
             if not secrets.compare_digest(self.headers.get('X-Prelude-CSRF', ''), self.csrf):
                 raise StudioError('页面会话已变化，请刷新后核对任务', 403, 'csrf')
+            if not auth_action and studio.invite_only and self.account is None:
+                raise StudioError('请先使用内测通行证登录，描述会为你保留', 401, 'login_required')
             if path == '/api/references':
                 try:
                     size = int(self.headers.get('Content-Length', '0'))
@@ -595,7 +756,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise StudioError('无法读取图片大小', 400, 'image_size') from None
                 if not 0 < size <= MAX_UPLOAD_BYTES:
                     raise StudioError('图片请控制在 10 MB 以内', 413, 'image_size')
-                self.connection.settimeout(30)
+                self.prepare_read()
                 content = self.rfile.read(size)
                 if len(content) != size:
                     raise StudioError('图片上传中断，请重新选择', 400, 'incomplete_upload')
@@ -608,9 +769,24 @@ class Handler(BaseHTTPRequestHandler):
                 size = int(self.headers.get('Content-Length', '0'))
                 if not 0 < size <= 16384:
                     raise StudioError('提交内容过大或为空', 413, 'body_size')
+                self.prepare_read()
                 payload = json.loads(self.rfile.read(size))
             except (ValueError, UnicodeError):
                 raise StudioError('提交内容无法读取') from None
+            if check_match:
+                if not isinstance(payload, dict):
+                    raise StudioError('提交内容格式不正确')
+                return self.json_response(studio.check_task(check_match[1], self.owner))
+            if auth_action:
+                if auth_action == 'logout':
+                    studio.access.logout(self.token_hash)
+                    self.rotate_session(secrets.token_urlsafe(32))
+                else:
+                    if self.account is not None:
+                        raise StudioError('请先退出当前通行证', 409, 'already_signed_in')
+                    token, _ = studio.access.authenticate(auth_action, payload, self.owner, self.token_hash, self.client_address[0])
+                    self.rotate_session(token)
+                return self.json_response({'ok': True})
             if rename_match:
                 if not isinstance(payload, dict):
                     raise StudioError('提交内容格式不正确')
@@ -623,14 +799,32 @@ class Handler(BaseHTTPRequestHandler):
     def handle_request(self):
         try:
             self.dispatch()
-        except StudioError as error:
+        except (StudioError, AccessError) as error:
             self.json_response({'error': str(error), 'code': error.code}, error.status)
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception:
             self.json_response({'error': '服务暂时不可用，原任务已保留，请刷新后核对', 'code': 'server_error'}, 500)
 
-    do_GET = do_HEAD = do_POST = handle_request
+
+class Handler(StudioRequest, BaseHTTPRequestHandler):
+    server_version = 'Prelude'
+
+    def prepare_read(self):
+        self.connection.settimeout(30)
+
+    def stream_file(self, path, start, length):
+        with path.open('rb') as handle:
+            handle.seek(start)
+            remaining = length
+            while remaining:
+                block = handle.read(min(256 * 1024, remaining))
+                if not block:
+                    break
+                self.wfile.write(block)
+                remaining -= len(block)
+
+    do_GET = do_HEAD = do_POST = StudioRequest.handle_request
 
 
 def main():
@@ -652,7 +846,10 @@ def main():
     limit = int(os.environ.get('PRELUDE_DAILY_LIMIT_CENTS', '3000'))
     if not 300 <= limit <= 30000:
         raise SystemExit('PRELUDE_DAILY_LIMIT_CENTS must be between 300 and 30000.')
-    studio = Studio(runtime, provider, daily_limit_cents=limit)
+    invitation_mode = os.environ.get('PRELUDE_INVITE_ONLY', '1')
+    if invitation_mode not in ('0', '1'):
+        raise SystemExit('PRELUDE_INVITE_ONLY must be 0 or 1.')
+    studio = Studio(runtime, provider, daily_limit_cents=limit, invite_only=invitation_mode == '1')
     server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
     server.studio = studio
     worker = threading.Thread(target=studio.run_worker, daemon=True)

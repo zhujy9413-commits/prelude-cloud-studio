@@ -1,0 +1,23 @@
+{
+	email {$PRELUDE_TLS_EMAIL}
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 30s
+			idle 2m
+		}
+	}
+}
+
+{$PRELUDE_DOMAIN} {
+	request_body {
+		max_size 10485760
+	}
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy 127.0.0.1:4180 {
+		header_up Host {$PRELUDE_DOMAIN}
+		header_up X-Forwarded-Proto https
+		header_up X-Prelude-Client-IP {remote_host}
+		header_up -Forwarded
+	}
+}

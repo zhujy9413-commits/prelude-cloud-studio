@@ -7,7 +7,7 @@
   const layer = document.createElement('div');
   layer.className = 'studio-cursor';
   layer.setAttribute('aria-hidden', 'true');
-  layer.innerHTML = `<svg class="studio-cursor__trail" aria-hidden="true"><defs><linearGradient id="prelude-comet-gradient" gradientUnits="userSpaceOnUse"><stop stop-color="#f5eaff"/><stop offset=".45" stop-color="#cfb6f2" stop-opacity=".5"/><stop offset="1" stop-color="#aebdf1" stop-opacity="0"/></linearGradient></defs><path class="comet-bloom"/><path class="comet-line"/></svg><span class="studio-cursor__point"><svg class="studio-cursor__spark" viewBox="0 0 24 24"><path d="M12 1.5C12.9 8.9 15.1 11.1 22.5 12 15.1 12.9 12.9 15.1 12 22.5 11.1 15.1 8.9 12.9 1.5 12 8.9 11.1 11.1 8.9 12 1.5Z" fill="#f5ecff" stroke="#26304e" stroke-width=".8"/></svg><svg class="studio-cursor__arrow" viewBox="0 0 20 23"><path d="M1 1 17 12.8 10.7 13.5 7.5 20.4Z" fill="#ead6ff" stroke="#f8f1ff" stroke-width="1.1" stroke-linejoin="round"/></svg></span>`;
+  layer.innerHTML = `<svg class="studio-cursor__trail" aria-hidden="true"><defs><linearGradient id="prelude-comet-gradient" gradientUnits="userSpaceOnUse"><stop stop-color="#f5eaff"/><stop offset=".45" stop-color="#cfb6f2" stop-opacity=".65"/><stop offset="1" stop-color="#aebdf1" stop-opacity="0"/></linearGradient></defs><path class="comet-bloom"/><path class="comet-line"/></svg><span class="studio-cursor__point"><svg class="studio-cursor__spark" viewBox="0 0 24 24"><path d="M12 1.5C12.9 8.9 15.1 11.1 22.5 12 15.1 12.9 12.9 15.1 12 22.5 11.1 15.1 8.9 12.9 1.5 12 8.9 11.1 11.1 8.9 12 1.5Z" fill="#f5ecff" stroke="#26304e" stroke-width=".8"/></svg><svg class="studio-cursor__arrow" viewBox="0 0 20 23"><path d="M1 1 17 12.8 10.7 13.5 7.5 20.4Z" fill="#ead6ff" stroke="#f8f1ff" stroke-width="1.1" stroke-linejoin="round"/></svg></span>`;
   document.body.append(layer);
   const point = layer.querySelector('.studio-cursor__point');
   const spark = layer.querySelector('.studio-cursor__spark');
@@ -15,8 +15,8 @@
   const gradient = layer.querySelector('linearGradient');
   const nativeTarget = 'input,textarea,[contenteditable="true"],[role="textbox"],video,audio,iframe,[disabled],[aria-disabled="true"]';
   const actionable = 'a[href],button,select,summary,[role="button"],[role="tab"]';
-  // Tail lifetime is 150 ms, capped at 36 CSS px (24 px over controls).
-  const lifetime = 150;
+  // A soft, readable comet: 300 ms, capped at 92 CSS px (56 px over controls).
+  const lifetime = 300;
   let x = 0, y = 0, frame = 0, lastMove = 0, active = false, action = false;
   let points = [];
   function allowed() { return fine.matches && !reduced.matches && !contrast.matches; }
@@ -39,7 +39,7 @@
     points = points.filter(p => now - p.time < lifetime);
     const trail = [{x, y}];
     let distance = 0, previous = {x, y};
-    const maxLength = action ? 24 : 36;
+    const maxLength = action ? 56 : 92;
     for (let i = points.length - 1; i >= 0; i--) {
       const p = points[i], segment = Math.hypot(previous.x - p.x, previous.y - p.y);
       if (segment < .35) continue;

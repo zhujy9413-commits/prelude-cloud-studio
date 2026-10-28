@@ -58,3 +58,20 @@ body .press-wave{background:radial-gradient(circle 115px at var(--press-x,50%) v
 @media(pointer:coarse){body .site-header .workspace-button{min-height:44px}body .generation-settings select,body .duration-field input{min-height:44px}}
 @media(max-width:760px){body .hero-footer{grid-template-columns:1fr auto}body .hero-footer>a{grid-column:1;justify-self:start}body .hero-footer>button{grid-column:2}}
 @media(prefers-reduced-motion:reduce){body .press-surface.is-pressing:not(:disabled){transform:none!important}body .prompt-shell,body .works-search{transition:none}}
+
+/* Keep the information needed to create and wait readable at every breakpoint. */
+body :is(.creation-pass,.composer-panel) .prototype-note{font-size:13px;line-height:1.75;color:#dce2f0;margin-top:13px}
+body #duration-help{font-size:12px;line-height:1.7;color:#d0d7e9}
+body #duration-help button{font-size:12px;line-height:1.5;min-height:32px;padding:6px 10px}
+body #form-status,body #preview-status{font-size:13px;line-height:1.75;color:#e5d4f5;overflow-wrap:anywhere}
+body #form-status a{font-size:inherit}
+body #workspace-connection{font-size:12px;color:#c8d2e6}
+body #preview-spec{font-size:12px;line-height:1.65;white-space:normal;color:#c5cfe4}
+body #generation-mode{font-size:12px;line-height:1.7;color:#d2d9ec}
+body #reference-title{font-size:12px;line-height:1.6}
+body #reference-description{font-size:11px;line-height:1.65;color:#c2cbe0}
+body .preview-visual #job-progress p,body .preview-visual #job-elapsed{font-size:13px;line-height:1.65;color:#e3dded}
+body .waiting-stages li{font-size:11px;letter-spacing:.04em;color:#c0bbcf}
+body .waiting-stages .is-current{color:#fff0ff}
+body .waiting-stages .is-done{color:#e2d7ee}
+@media(max-width:510px){body .waiting-emblem,body .waiting-eyebrow{display:none}body .waiting-content{padding:18px 16px}body .waiting-stages{margin-top:13px}body .preview-visual #job-elapsed{margin-top:10px}}

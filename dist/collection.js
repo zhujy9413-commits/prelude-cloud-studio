@@ -5,6 +5,7 @@
       const $ = selector => document.querySelector(selector);
       const $$ = selector => [...document.querySelectorAll(selector)];
       const dialog = $('#work-detail-dialog'), video = $('#detail-video');
+      const playback = window.PreludePlayback;
       const busy = new Set();
       let filter = 'all', search = '', signature = '', opened = null, previewId = null, undo = null;
       const keyOf = entry => `${entry.kind}:${entry.item.id}`;
@@ -41,8 +42,7 @@
         $('#detail-state').textContent=trashed?'已移入最近删除':kind==='plan'?'灵感方案':deps.labels[item.status]||'处理中';
         $('#detail-type').textContent=kind==='plan'?'AI 概念静帧 · 非视频':trashed?'恢复后可播放':'AI 生成视频';
         video.hidden=!complete;
-        if(complete&&video.getAttribute('src')!==item.video_url){video.src=item.video_url;video.load();}
-        if(!complete&&video.hasAttribute('src')){video.pause();video.removeAttribute('src');video.load();}
+        if(!complete)playback.release(video);
         $('#detail-image').hidden=complete;
         $('#detail-image').src=kind==='plan'?deps.planImage(item.preset):item.reference_image||'assets/cloudscape.webp';
         $('#detail-placeholder').hidden=complete||kind==='plan';
@@ -52,14 +52,42 @@
         if(item.reference_id)parameters.push(['参考首帧',item.reference_name||'上传图片']);
         const reference=$('#detail-reference');reference.hidden=!item.reference_image;
         if(item.reference_image){reference.href=item.reference_image;reference.querySelector('img').src=item.reference_image;reference.querySelector('small').textContent=item.reference_name||'点击查看生成时的原图';}else reference.removeAttribute('href');
+        if(kind==='job'&&item.playback_optimized)parameters.push(['播放与下载',`压缩预览 ${(item.playback_size_bytes/1000000).toFixed(1)} MB · 原画质 ${(item.original_size_bytes/1000000).toFixed(1)} MB（保留模型原片）`]);
+        if(kind==='job'&&Number.isFinite(item.timings?.ready_at)&&item.timings.ready_at>=item.created_at)
+          parameters.push(['成片准备用时',`${Math.round(item.timings.ready_at-item.created_at)} 秒 · 含生成、保存与播放版准备，不含浏览器缓冲`]);
         if(kind==='job')parameters.push(['标价估算',`¥${item.estimated_cost_cny} · 非实扣账单`]);
         if(trashed)parameters.push(['删除时间',new Date(item.deleted_at*1000).toLocaleString('zh-CN',{hour12:false})]);
         const list=$('#detail-parameters');list.replaceChildren();
         parameters.forEach(([label,value])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;list.append(dt,dd);});
         $('#detail-prompt').textContent=item.prompt;
+        const record=item.generation_record, saved=record?.state==='recorded'?record.snapshot:null;
+        $('#detail-generation-record').hidden=kind!=='job';
+        $('#detail-record-summary').textContent=saved?'已保存提交设置与描述指纹；模型内部扩写的最终文本未返回': '这条作品生成于记录功能上线前，历史参数未完整记录；已有描述与基本信息保留';
+        const recordList=$('#detail-record-parameters');recordList.replaceChildren();
+        if(saved){
+          const p=saved.parameters;
+          const values=[['描述扩写',p.prompt_extend?'已启用':'未启用'],['镜头设置',p.shot_type==='single'?'单镜头':'未指定'],
+            ['随机种子',Number.isInteger(p.seed)?String(p.seed):'由模型随机生成（未显式指定）'],
+            ['原始描述',saved.original_prompt===saved.submitted_prompt?'与提交描述一致':'已保留原文，提交时移除了首尾空白'],
+            ['提交记录',record.submission_started_at?'已尝试提交，是否受理由任务状态确认':'尚未尝试提交'],
+            ['描述指纹',saved.submitted_prompt_sha256],['请求指纹',record.request_sha256]];
+          if(saved.reference)values.push(['首帧指纹',saved.reference.sha256]);
+          for(const [label,value] of values){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;recordList.append(dt,dd);}
+        }
         $('#detail-message').textContent=trashed?'恢复后即可继续播放、下载和复用':item.error||'';
+        if(complete)playback.load(video,item,{
+          progress:({loaded,total,ready,mode})=>{if(opened?.id===item.id)$('#detail-message').textContent=mode==='native'?'正在准备在线播放；原画质可直接下载':total&&loaded===total?'':`${ready?'正在继续载入':'正在准备播放'} ${(loaded/1000000).toFixed(1)}${total?' / '+(total/1000000).toFixed(1):''} MB`;},
+          loading:()=>{if(opened?.id===item.id)$('#detail-message').textContent='正在完成载入，作品已保存';},
+          ready:()=>{if(opened?.id===item.id)$('#detail-message').textContent='';},
+          error:message=>{if(opened?.id===item.id)$('#detail-message').textContent=message;}
+        });
         $('#detail-download').hidden=!complete;
-        if(complete)$('#detail-download').href=item.video_url+'?download=1';else $('#detail-download').removeAttribute('href');
+        if(complete)playback.bindDownload($('#detail-download'),item);else $('#detail-download').removeAttribute('href');
+        const size=bytes=>Number.isFinite(bytes)?` · ${(bytes/1000000).toFixed(1)} MB`:'';
+        $('#detail-download [data-download-label]').textContent=(item.playback_optimized?'下载压缩版':'下载原画质')+size(item.playback_size_bytes||item.original_size_bytes);
+        $('#detail-original').hidden=!(complete&&item.playback_optimized);
+        if(complete)playback.bindDownload($('#detail-original'),item,true);else $('#detail-original').removeAttribute('href');
+        $('#detail-original').textContent='下载原画质'+size(item.original_size_bytes);
         $('#detail-reuse').hidden=trashed;$('#detail-reuse-label').textContent=kind==='job'?'继续调整':'按此画面生成';$('#detail-progress').hidden=trashed||!active(entry);
         $('#detail-restore').hidden=!trashed;$('#detail-favorite').hidden=trashed;$('#detail-trash').hidden=trashed;
         $('#detail-favorite').setAttribute('aria-pressed',String(Boolean(item.favorite)));
@@ -109,7 +137,7 @@
         $('#trash-help').hidden=filter!=='trash';
         if(previewId)updatePreview(deps.getJobs().find(item=>item.id===previewId));
         if(dialog.open&&opened){const entry=find(opened.kind,opened.id);if(entry)fillDetail(entry);else dialog.close();}
-        const next=JSON.stringify([entries.map(({kind,item})=>[kind,item.id,item.title,item.prompt,item.favorite,item.deleted_at,item.status,item.video_url,item.error]),filter,search,[...busy]]);
+        const next=JSON.stringify([entries.map(({kind,item})=>[kind,item.id,item.title,item.prompt,item.favorite,item.deleted_at,item.status,item.video_url,item.playback_url,item.poster_url,item.error]),filter,search,[...busy]]);
         if(signature===next)return;signature=next;
         const shown=(filter==='trash'?deleted:live).filter(entry=>{
           if(filter==='favorite'&&!entry.item.favorite)return false;
@@ -117,7 +145,6 @@
           if(filter==='active'&&!active(entry))return false;
           return `${nameOf(entry.item)} ${entry.item.prompt}`.toLocaleLowerCase().includes(search);
         }).sort((a,b)=>filter==='trash'?b.item.deleted_at-a.item.deleted_at:dateOf(b.item)-dateOf(a.item));
-        thumbnails.disconnect();
         const list=$('#library-items');list.replaceChildren();$('#library-empty').hidden=shown.length>0;
         const empty=search?['没有找到这一幕','试试其他名称或描述关键词']:filter==='trash'?['最近删除，空空如也','删除的作品会保留在这里，随时可以找回']:filter==='favorite'?['把喜欢的镜头，留在这里','点击作品上的星星，收藏让你心动的一幕']:filter==='all'?['你的第一幕，还在想象中','写下一句话，让它成为第一个被看见的镜头']:['这里还没有镜头','可以切换分类，看看其他作品'];
         $('#library-empty-title').textContent=empty[0];$('#library-empty-description').textContent=empty[1];$('#library-create').hidden=Boolean(search)||filter!=='all';
@@ -128,7 +155,7 @@
           const button=document.createElement('button');button.type='button';button.className='work-open';button.setAttribute('aria-label',`查看《${nameOf(item)}》详情`);button.addEventListener('click',()=>open(entry));
           const cover=document.createElement('div');cover.className='work-cover';
           if(kind==='job'&&item.status==='SUCCEEDED'&&!trashed){
-            const thumb=document.createElement('video');thumb.dataset.src=item.video_url+'#t=0.1';thumb.preload='metadata';thumb.muted=true;thumb.playsInline=true;thumb.tabIndex=-1;thumb.setAttribute('aria-hidden','true');cover.append(thumb);thumbnails.observe(thumb);
+            if(item.poster_url){const thumb=document.createElement('img');thumb.src=item.poster_url;thumb.loading='lazy';thumb.decoding='async';thumb.alt='';cover.append(thumb);}else cover.append(deps.icon('film'));
             const play=document.createElement('span');play.className='work-play';play.append(deps.icon('play'));cover.append(play);
           }else if(kind==='plan'){const img=document.createElement('img');img.src=deps.planImage(item.preset);img.alt='';cover.append(img);}
           else cover.append(deps.icon(trashed?'restore':'film'));
@@ -145,7 +172,6 @@
           card.append(button,actions);list.append(card);
         });
       }
-      const thumbnails=new IntersectionObserver(entries=>entries.forEach(({target,isIntersecting})=>{if(isIntersecting&&target.dataset.src){target.src=target.dataset.src;delete target.dataset.src;thumbnails.unobserve(target);}}),{rootMargin:'160px'});
       $$('[data-work-filter]').forEach(button=>button.addEventListener('click',()=>{filter=button.dataset.workFilter;$$('[data-work-filter]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));render();}));
       $('#work-search').addEventListener('input',event=>{search=event.target.value.trim().toLocaleLowerCase();render();});
       $('#preview-detail').addEventListener('click',()=>{const entry=find('job',previewId);if(entry)open(entry);});
@@ -158,7 +184,7 @@
       $('#copy-work-prompt').addEventListener('click',async()=>{const entry=opened&&find(opened.kind,opened.id);if(!entry)return;try{await navigator.clipboard.writeText(entry.item.prompt);$('#detail-message').textContent='描述已复制';}catch{$('#detail-message').textContent='暂时无法复制，可以直接选中下方描述复制';}});
       $('#undo-trash').addEventListener('click',()=>{const entry=undo&&find(undo.kind,undo.id);if(entry)mutate(entry,'restore');});
       $('#dismiss-collection-toast').addEventListener('click',()=>{$('#collection-toast').hidden=true;undo=null;});
-      dialog.addEventListener('close',()=>{video.pause();video.removeAttribute('src');video.load();opened=null;});
+      dialog.addEventListener('close',()=>{video.pause();opened=null;});
       dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}});
       video.addEventListener('error',()=>{$('#detail-message').textContent='播放暂不可用，可以下载视频后查看';});
       window.addEventListener('pagehide',()=>video.pause());

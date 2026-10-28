@@ -18,19 +18,20 @@
   <link rel="stylesheet" href="studio.css?v=20261025-1">
   <link rel="stylesheet" href="navigation.css?v=1">
   <script src="navigation.js?v=1"></script>
-  <link rel="stylesheet" href="waiting.css?v=1"><script src="waiting.js?v=1" defer></script>
-  <script src="duration.js?v=1" defer></script>
-  <script src="motion-guide.js?v=20261026-1" defer></script><script src="app.js?v=20261026-adjust1" defer></script>
-  <script src="effects.js" defer></script>
+  <link rel="stylesheet" href="waiting.css?v=1"><script src="playback.js?v=20261029-1" defer></script><script src="waiting.js?v=20261029-1" defer></script>
+  <script src="duration.js?v=20261028-4" defer></script>
+  <script src="motion-guide.js?v=20261026-1" defer></script><script src="access.js?v=20261027-1" defer></script><script src="app.js?v=20261029-3" defer></script>
+  <link rel="stylesheet" href="access.css?v=20261027-1">
+  <script src="effects.js?v=20261028-1" defer></script>
   <link rel="stylesheet" href="interactions.css?v=1">
-  <link rel="stylesheet" href="refinements.css?v=20261026-2">
+  <link rel="stylesheet" href="refinements.css?v=20261029-3">
   <link rel="stylesheet" href="night-sky.css?v=20261026-2">
   <script src="night-sky.js?v=20261026-2" defer></script>
-  <link rel="stylesheet" href="cursor.css?v=20261026-1">
+  <link rel="stylesheet" href="cursor.css?v=20261027-2">
   <link rel="stylesheet" href="upload.css?v=20261026-1">
   <link rel="stylesheet" href="motion-guide.css?v=20261026-1">
   <script src="interactions.js?v=20261026-1" defer></script>
-  <script src="cursor.js?v=20261026-1" defer></script>
+  <script src="cursor.js?v=20261027-2" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#prompt">跳到创作输入框</a>
@@ -55,7 +56,7 @@
   <main>
     <section class="hero" id="create" aria-labelledby="hero-title">
       <img class="hero-art" src="assets/cloudscape.webp" width="1672" height="941" alt="暮色云海，深蓝天空中的紫色云层被地平线的柔光照亮" fetchpriority="high">
-      <video class="hero-video" data-src="assets/cloudscape-loop.mp4" muted loop playsinline preload="none" aria-hidden="true" tabindex="-1"></video>
+      <video class="hero-video" data-src="assets/cloudscape-loop.mp4?v=20261028-1" muted loop playsinline preload="none" aria-hidden="true" tabindex="-1"></video>
       <div class="hero-shade" aria-hidden="true"></div>
       <div class="hero-layout">
         <div class="hero-copy">
@@ -109,13 +110,13 @@
         <div class="waiting-content"><span class="waiting-eyebrow" id="job-eyebrow">IMAGINATION IN MOTION</span>
           <div class="waiting-emblem" aria-hidden="true"><span>✦</span></div>
           <div class="waiting-message" role="status" aria-live="polite" aria-atomic="true"><h3 id="job-progress-title">让想象，慢慢显影</h3><p id="job-progress-detail">灵感正在成为画面</p></div>
-          <ol class="waiting-stages" aria-label="视频生成阶段"><li data-stage="0"><i aria-hidden="true"></i><span>提交</span></li><li data-stage="1"><i aria-hidden="true"></i><span>排队</span></li><li data-stage="2"><i aria-hidden="true"></i><span>生成</span></li><li data-stage="3"><i aria-hidden="true"></i><span>保存</span></li></ol>
+          <ol class="waiting-stages" aria-label="视频生成阶段"><li data-stage="0"><i aria-hidden="true"></i><span>提交</span></li><li data-stage="1"><i aria-hidden="true"></i><span>排队</span></li><li data-stage="2"><i aria-hidden="true"></i><span>生成</span></li><li data-stage="3"><i aria-hidden="true"></i><span>成片准备</span></li><li data-stage="4"><i aria-hidden="true"></i><span>播放准备</span></li></ol>
           <span id="job-elapsed" aria-live="off"></span>
         </div><span class="waiting-caption">云海为等待氛围 · 非生成画面</span>
       </div>
       <span class="static-label" id="preview-badge">AI 概念静帧 · 非视频</span>
     </div>
-    <div class="preview-details"><div class="preview-heading"><h2 id="preview-title">暮色云海</h2><span id="preview-spec">16:9 · 5 秒</span></div><p id="preview-prompt"></p><div class="preview-notice" id="preview-notice">先从这张概念静帧获得灵感，再用你的描述生成视频</div><div class="preview-actions"><button type="button" class="secondary-button" id="use-preview"><span id="use-preview-label">按此画面生成</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button><button type="button" class="secondary-button" id="save-plan"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>保存镜头方案</span></button><a class="secondary-button" id="download-video" hidden download><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>下载视频</a><button type="button" class="secondary-button" id="check-task" hidden>重新查询进度</button></div><p id="preview-status" role="status" aria-live="polite"></p></div>
+    <div class="preview-details"><div class="preview-heading"><h2 id="preview-title">暮色云海</h2><span id="preview-spec">16:9 · 5 秒</span></div><p id="preview-prompt"></p><div class="preview-notice" id="preview-notice">先从这张概念静帧获得灵感，再用你的描述生成视频</div><div class="preview-actions"><button type="button" class="secondary-button" id="use-preview"><span id="use-preview-label">按此画面生成</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button><button type="button" class="secondary-button" id="save-plan"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>保存镜头方案</span></button><a class="secondary-button" id="download-original" hidden download>下载原片</a><a class="secondary-button" id="download-video" hidden download><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span data-download-label>下载视频</span></a><button type="button" class="secondary-button" id="check-task" hidden>重新查询进度</button></div><p id="preview-status" role="status" aria-live="polite"></p></div>
   </dialog>
   <dialog id="library-dialog" aria-labelledby="library-title"><div class="dialog-top"><span class="dialog-kicker">YOUR CREATIVE SPACE</span><button type="button" class="icon-button" data-close-dialog aria-label="关闭我的作品"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="library-content"><h2 id="library-title">我的作品</h2><p class="library-note">生成的视频会自动保留在这台电脑的工作室中，可随时回来查看和下载</p><p id="library-status" role="status" aria-live="polite"></p><div id="library-items"></div><div class="library-empty" id="library-empty"><svg class="icon" aria-hidden="true"><use href="#i-film"/></svg><h3>你的第一幕，还在想象中</h3><p>从一句描述开始，生成一个属于你的镜头</p><button type="button" class="secondary-button" id="library-create">开始创作<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div></dialog>
 <dialog id="reference-dialog" aria-labelledby="reference-full-title"><div class="dialog-top"><span class="dialog-kicker">FIRST FRAME / 参考首帧</span><button type="button" class="icon-button" data-close-dialog aria-label="关闭参考图"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div><img id="reference-full-image" class="reference-full-image" alt="参考首帧大图"><div class="reference-full-caption"><strong id="reference-full-title">你的参考首帧</strong><p>这张图片将作为视频首帧，后续动作由你的描述引导</p></div></dialog>
